@@ -96,8 +96,19 @@ impl GameState {
                 self.players[self.curr_player_idx].tokens[c] += 2;
             }
             Action::ReserveCard(loc) => {
+                if let CardLocation::Reserve(_) = loc {
+                    return Err("Card is already reserved".into());
+                }
+                if self.players[self.curr_player_idx].reserved.len() >= 3 {
+                    return Err("At most 3 cards can be reserved".into());
+                }
                 let card = self.take_card(loc)?;
-                self.players[self.curr_player_idx].reserved.push(card);
+                let player = &mut self.players[self.curr_player_idx];
+                player.reserved.push(card);
+                if self.bank[5] > 0 {
+                    self.bank[5] -= 1;
+                    player.tokens[5] += 1;
+                }
             }
             Action::BuyCard(loc) => {
                 if !self.players[self.curr_player_idx].can_buy(self.peek_card(loc)?) {
