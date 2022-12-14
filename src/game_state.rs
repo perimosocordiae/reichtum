@@ -64,19 +64,23 @@ impl GameState {
     }
     pub fn take_turn(&mut self, action: &Action) -> Result<bool, DynError> {
         match action {
-            Action::Take3Tokens(colors) => {
-                if colors[0] == colors[1] || colors[0] == colors[2] || colors[1] == colors[2] {
-                    return Err("Must take 3 different colors".into());
+            Action::TakeDifferentColorTokens(colors) => {
+                if colors.len() > 3 {
+                    return Err("Cannot take more than 3 tokens".into());
                 }
-                if colors.iter().any(|&c| c == Color::Gold) {
-                    return Err("Cannot take a gold token".into());
+                for (i, &c) in colors.iter().enumerate() {
+                    if c == Color::Gold {
+                        return Err("Cannot take a gold token".into());
+                    }
+                    if self.bank[c as usize] == 0 {
+                        return Err("Not enough tokens in bank".into());
+                    }
+                    if colors[i + 1..].contains(&c) {
+                        return Err("Cannot take the same color twice".into());
+                    }
                 }
-                let num_taken = colors
-                    .iter()
-                    .filter(|&c| self.bank[*c as usize] > 0)
-                    .count() as u8;
                 let player = &mut self.players[self.curr_player_idx];
-                if player.num_tokens() + num_taken > 10 {
+                if player.num_tokens() as usize + colors.len() > 10 {
                     return Err("Cannot take more than 10 tokens".into());
                 }
                 for &color in colors {
@@ -87,7 +91,7 @@ impl GameState {
                     }
                 }
             }
-            Action::Take2Tokens(color) => {
+            Action::TakeSameColorTokens(color) => {
                 let c = *color as usize;
                 if self.bank[c] < 4 {
                     return Err("Not enough tokens in bank".into());
@@ -210,8 +214,8 @@ impl GameState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Action {
-    Take3Tokens([Color; 3]),
-    Take2Tokens(Color),
+    TakeDifferentColorTokens(Vec<Color>),
+    TakeSameColorTokens(Color),
     ReserveCard(CardLocation),
     BuyCard(CardLocation),
 }
