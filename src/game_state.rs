@@ -21,7 +21,7 @@ pub struct GameState {
 
     // Players.
     players: Vec<Player>,
-    curr_player_idx: usize,
+    pub curr_player_idx: usize,
 }
 impl GameState {
     pub fn init(num_players: usize, data_dir: &Path) -> Result<GameState, DynError> {
