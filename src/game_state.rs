@@ -21,6 +21,7 @@ pub struct GameState {
 
     // Players.
     players: Vec<Player>,
+    curr_player_idx: usize,
 }
 impl GameState {
     pub fn init(num_players: usize, data_dir: &Path) -> Result<GameState, DynError> {
@@ -58,8 +59,157 @@ impl GameState {
             nobles,
             bank,
             players: (0..num_players).map(|_| Player::default()).collect(),
+            curr_player_idx: 0,
         })
     }
+    pub fn take_turn(&mut self, action: &Action) -> Result<bool, DynError> {
+        match action {
+            Action::Take3Tokens(colors) => {
+                if colors[0] == colors[1] || colors[0] == colors[2] || colors[1] == colors[2] {
+                    return Err("Must take 3 different colors".into());
+                }
+                if colors.iter().any(|&c| c == Color::Gold) {
+                    return Err("Cannot take a gold token".into());
+                }
+                let num_taken = colors
+                    .iter()
+                    .filter(|&c| self.bank[*c as usize] > 0)
+                    .count() as u8;
+                let player = &mut self.players[self.curr_player_idx];
+                if player.num_tokens() + num_taken > 10 {
+                    return Err("Cannot take more than 10 tokens".into());
+                }
+                for &color in colors {
+                    let c = color as usize;
+                    if self.bank[c] > 0 {
+                        self.bank[c] -= 1;
+                        player.tokens[c] += 1;
+                    }
+                }
+            }
+            Action::Take2Tokens(color) => {
+                let c = *color as usize;
+                if self.bank[c] < 4 {
+                    return Err("Not enough tokens in bank".into());
+                }
+                self.bank[c] -= 2;
+                self.players[self.curr_player_idx].tokens[c] += 2;
+            }
+            Action::ReserveCard(loc) => {
+                let card = self.take_card(loc)?;
+                self.players[self.curr_player_idx].reserved.push(card);
+            }
+            Action::BuyCard(loc) => {
+                if !self.players[self.curr_player_idx].can_buy(self.peek_card(loc)?) {
+                    return Err("Cannot afford card".into());
+                }
+                let card = self.take_card(loc)?;
+                let player = &mut self.players[self.curr_player_idx];
+                let mut missing = 0u8;
+                for (i, &cost) in card.cost.iter().enumerate() {
+                    missing += cost.saturating_sub(player.tokens[i]);
+                }
+                player.tokens[5] -= missing;
+                self.bank[5] += missing;
+                for (i, &cost) in card.cost.iter().enumerate() {
+                    player.tokens[i] -= cost;
+                    self.bank[i] += cost;
+                }
+                player.cards.push(card);
+            }
+        }
+        // If a player can acquire a noble, they do so.
+        // Only one noble is acquired per turn.
+        let player = &mut self.players[self.curr_player_idx];
+        let mut acquirable_nobles = self
+            .nobles
+            .iter()
+            .enumerate()
+            .filter(|(_, n)| player.can_acquire(n));
+        if let Some((idx, _)) = acquirable_nobles.next() {
+            player.nobles.push(self.nobles.remove(idx));
+        }
+        // Check for game over.
+        if player.vp() >= 15 {
+            return Ok(true);
+        }
+        // Advance to the next player.
+        self.curr_player_idx = (self.curr_player_idx + 1) % self.players.len();
+        Ok(false)
+    }
+    fn peek_card(&self, loc: &CardLocation) -> Result<&Card, DynError> {
+        match loc {
+            CardLocation::Pile(level) => self
+                .piles
+                .get(*level - 1)
+                .ok_or("Invalid pile level")?
+                .last()
+                .ok_or_else(|| "No cards left".into()),
+            CardLocation::Market(level, idx) => self
+                .market
+                .get(*level - 1)
+                .ok_or("Invalid market level")?
+                .get(*idx)
+                .ok_or_else(|| "Invalid market index".into()),
+            CardLocation::Reserve(idx) => self
+                .players
+                .get(self.curr_player_idx)
+                .ok_or("Invalid player")?
+                .reserved
+                .get(*idx)
+                .ok_or_else(|| "Invalid reserve index".into()),
+        }
+    }
+    fn take_card(&mut self, loc: &CardLocation) -> Result<Card, DynError> {
+        match loc {
+            CardLocation::Pile(level) => {
+                if !(1..=3).contains(level) {
+                    return Err("Invalid pile level".into());
+                }
+                self.piles[*level - 1]
+                    .pop()
+                    .ok_or_else(|| "No cards left".into())
+            }
+            CardLocation::Market(level, idx) => {
+                if !(1..=3).contains(level) {
+                    return Err("Invalid market level".into());
+                }
+                let pile = &mut self.piles[*level - 1];
+                let market = &mut self.market[*level - 1];
+                if !(0..market.len()).contains(idx) {
+                    return Err("Invalid market index".into());
+                }
+                Ok(if pile.is_empty() {
+                    market.remove(*idx)
+                } else {
+                    market.push(pile.pop().unwrap());
+                    market.swap_remove(*idx)
+                })
+            }
+            CardLocation::Reserve(idx) => {
+                let player = &mut self.players[self.curr_player_idx];
+                if !(0..player.reserved.len()).contains(idx) {
+                    return Err("Invalid reservation".into());
+                }
+                Ok(player.reserved.remove(*idx))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Action {
+    Take3Tokens([Color; 3]),
+    Take2Tokens(Color),
+    ReserveCard(CardLocation),
+    BuyCard(CardLocation),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CardLocation {
+    Pile(usize),
+    Market(usize, usize),
+    Reserve(usize),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +237,8 @@ struct Player {
     tokens: [u8; 6],
     // Purchased cards
     cards: Vec<Card>,
+    // Reserved cards
+    reserved: Vec<Card>,
     // Acquired nobles
     nobles: Vec<Noble>,
 }
@@ -95,8 +247,12 @@ impl Player {
         Self {
             tokens: [0, 0, 0, 0, 0, 0],
             cards: Vec::new(),
+            reserved: Vec::new(),
             nobles: Vec::new(),
         }
+    }
+    fn num_tokens(&self) -> u8 {
+        self.tokens.iter().sum()
     }
     fn vp(&self) -> u8 {
         self.cards.iter().map(|c| c.vp).sum::<u8>() + self.nobles.iter().map(|n| n.vp).sum::<u8>()
@@ -125,7 +281,7 @@ impl Player {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Color {
     White,
