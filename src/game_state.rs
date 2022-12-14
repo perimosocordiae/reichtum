@@ -92,9 +92,15 @@ impl GameState {
                 }
             }
             Action::TakeSameColorTokens(color) => {
+                if color == &Color::Gold {
+                    return Err("Cannot take a gold token".into());
+                }
                 let c = *color as usize;
                 if self.bank[c] < 4 {
                     return Err("Not enough tokens in bank".into());
+                }
+                if self.players[self.curr_player_idx].num_tokens() + 2 > 10 {
+                    return Err("Cannot take more than 10 tokens".into());
                 }
                 self.bank[c] -= 2;
                 self.players[self.curr_player_idx].tokens[c] += 2;
@@ -378,4 +384,24 @@ fn test_game_state_init() {
     assert_eq!(gs.market[1].len(), 4);
     assert_eq!(gs.market[2].len(), 4);
     assert_eq!(gs.nobles.len(), 3);
+}
+
+#[test]
+fn test_game_turns() {
+    let mut gs = GameState::init(2, Path::new(".")).unwrap();
+    assert_eq!(gs.curr_player_idx, 0);
+    assert!(!gs
+        .take_turn(&Action::TakeDifferentColorTokens(vec![
+            Color::White,
+            Color::Blue,
+            Color::Green
+        ]))
+        .unwrap());
+    assert_eq!(gs.players[0].num_tokens(), 3);
+    assert_eq!(gs.curr_player_idx, 1);
+    assert!(!gs
+        .take_turn(&Action::TakeSameColorTokens(Color::Red))
+        .unwrap());
+    assert_eq!(gs.players[1].num_tokens(), 2);
+    assert_eq!(gs.curr_player_idx, 0);
 }
