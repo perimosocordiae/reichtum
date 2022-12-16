@@ -1,6 +1,5 @@
 use rand::prelude::SliceRandom;
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 
 type DynError = Box<dyn std::error::Error>;
 
@@ -24,11 +23,11 @@ pub struct GameState {
     pub curr_player_idx: usize,
 }
 impl GameState {
-    pub fn init(num_players: usize, data_dir: &Path) -> Result<GameState, DynError> {
+    pub fn init(num_players: usize) -> Result<GameState, DynError> {
         if !(2..=9).contains(&num_players) {
             return Err("Invalid number of players".into());
         }
-        let cards = load_from_csv::<Card>(&data_dir.join("cards.csv"))?;
+        let cards = load_from_csv::<Card>(include_str!("../cards.csv"))?;
         let mut market = [Vec::new(), Vec::new(), Vec::new()];
         for card in cards {
             market[card.level - 1].push(card);
@@ -43,7 +42,7 @@ impl GameState {
             market[2].split_off(4),
         ];
 
-        let mut nobles = load_from_csv::<Noble>(&data_dir.join("nobles.csv"))?;
+        let mut nobles = load_from_csv::<Noble>(include_str!("../nobles.csv"))?;
         nobles.shuffle(&mut rng);
         nobles.truncate(num_players + 1);
 
@@ -318,8 +317,10 @@ pub enum Color {
     Gold,
 }
 
-fn load_from_csv<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>, DynError> {
-    let mut rdr = csv::ReaderBuilder::new().flexible(true).from_path(path)?;
+fn load_from_csv<T: for<'de> Deserialize<'de>>(data: &str) -> Result<Vec<T>, DynError> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(data.as_bytes());
     let mut out = Vec::new();
     for result in rdr.deserialize::<T>() {
         let record: T = result?;
@@ -330,14 +331,25 @@ fn load_from_csv<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<Vec<T>, Dy
 
 #[test]
 fn test_load_cards_from_csv() {
-    let cards = load_from_csv::<Card>(Path::new("cards.csv")).unwrap();
-    assert_eq!(cards.len(), 90);
+    let cards = load_from_csv::<Card>(
+        "level,color,vp,cost\n\
+         1,black,0,1,1,1,1,0\n\
+         1,black,0,1,2,1,1,0",
+    )
+    .unwrap();
+    assert_eq!(cards.len(), 2);
 }
 
 #[test]
 fn test_load_nobles_from_csv() {
-    let nobles = load_from_csv::<Noble>(Path::new("nobles.csv")).unwrap();
-    assert_eq!(nobles.len(), 10);
+    let nobles = load_from_csv::<Noble>(
+        "vp,cost\n\
+        3,0,0,4,4,0\n\
+        3,3,0,0,3,3\n\
+        3,4,4,0,0,0",
+    )
+    .unwrap();
+    assert_eq!(nobles.len(), 3);
 }
 
 #[test]
@@ -381,7 +393,7 @@ fn test_player_can_buy() {
 
 #[test]
 fn test_game_state_init() {
-    let gs = GameState::init(2, Path::new(".")).unwrap();
+    let gs = GameState::init(2).unwrap();
     assert_eq!(gs.piles[0].len(), 36);
     assert_eq!(gs.piles[1].len(), 26);
     assert_eq!(gs.piles[2].len(), 16);
@@ -393,7 +405,7 @@ fn test_game_state_init() {
 
 #[test]
 fn test_game_turns() {
-    let mut gs = GameState::init(2, Path::new(".")).unwrap();
+    let mut gs = GameState::init(2).unwrap();
     assert_eq!(gs.curr_player_idx, 0);
     assert!(!gs
         .take_turn(&Action::TakeDifferentColorTokens(vec![
