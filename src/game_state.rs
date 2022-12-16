@@ -20,7 +20,7 @@ pub struct GameState {
     bank: [u8; 6],
 
     // Players.
-    players: Vec<Player>,
+    pub players: Vec<Player>,
     pub curr_player_idx: usize,
 }
 impl GameState {
@@ -152,11 +152,16 @@ impl GameState {
         }
         // Check for game over.
         if player.vp() >= 15 {
+            // Invalid player index indicates that the game is over.
+            self.curr_player_idx = self.players.len();
             return Ok(true);
         }
         // Advance to the next player.
         self.curr_player_idx = (self.curr_player_idx + 1) % self.players.len();
         Ok(false)
+    }
+    pub fn is_finished(&self) -> bool {
+        self.curr_player_idx >= self.players.len()
     }
     fn peek_card(&self, loc: &CardLocation) -> Result<&Card, DynError> {
         match loc {
@@ -253,7 +258,7 @@ struct Noble {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Player {
+pub struct Player {
     // Token counts: [white, blue, green, red, black, gold]
     tokens: [u8; 6],
     // Purchased cards
@@ -275,7 +280,7 @@ impl Player {
     fn num_tokens(&self) -> u8 {
         self.tokens.iter().sum()
     }
-    fn vp(&self) -> u8 {
+    pub fn vp(&self) -> u8 {
         self.cards.iter().map(|c| c.vp).sum::<u8>() + self.nobles.iter().map(|n| n.vp).sum::<u8>()
     }
     fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
