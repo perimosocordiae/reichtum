@@ -273,10 +273,11 @@ impl GameState {
             }
         }
 
-        // Reserve every available card (including piles) if there's a gold
-        // token available. Technically we can reserve a card even there's no
-        // gold token available, but that's unlikely to be useful or necessary.
-        if self.bank[5] > 0 {
+        // Reserve every available card (including piles) if we have fewer than
+        // 3 reserved already, and if there's a gold token available.
+        // Technically we can reserve a card even there's no gold token
+        // available, but that's unlikely to be useful or necessary.
+        if player.reserved.len() < 3 && self.bank[5] > 0 {
             for (level, market) in self.market.iter().enumerate() {
                 for idx in 0..market.len() {
                     actions.push(Action::ReserveCard(CardLocation::Market(level + 1, idx)));
