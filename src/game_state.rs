@@ -220,6 +220,72 @@ impl GameState {
             }
         }
     }
+    pub fn valid_actions(&self) -> Vec<Action> {
+        let mut actions = Vec::new();
+        let player = &self.players[self.curr_player_idx];
+        // Try to buy every available card in the market.
+        for (level, market) in self.market.iter().enumerate() {
+            for (idx, card) in market.iter().enumerate() {
+                if player.can_buy(card) {
+                    actions.push(Action::BuyCard(CardLocation::Market(level + 1, idx)));
+                }
+            }
+        }
+        // Try to buy every reserved card.
+        for (idx, card) in player.reserved.iter().enumerate() {
+            if player.can_buy(card) {
+                actions.push(Action::BuyCard(CardLocation::Reserve(idx)));
+            }
+        }
+        // Take tokens from the bank, if possible.
+        let num_tokens = player.num_tokens();
+        if num_tokens <= 8 {
+            for (i, &token) in self.bank.iter().enumerate() {
+                if token >= 4 {
+                    actions.push(Action::TakeSameColorTokens(i.try_into().unwrap()));
+                }
+            }
+        }
+        // Take up to 3 different color tokens, if possible.
+        // TODO: Handle the case where we only get 1 or 2 tokens from this.
+        if num_tokens <= 7 {
+            for i in 0..3 {
+                if self.bank[i] == 0 {
+                    continue;
+                }
+                for j in i + 1..4 {
+                    if self.bank[j] == 0 {
+                        continue;
+                    }
+                    for k in j + 1..5 {
+                        if self.bank[k] > 0 {
+                            actions.push(Action::TakeDifferentColorTokens(vec![
+                                i.try_into().unwrap(),
+                                j.try_into().unwrap(),
+                                k.try_into().unwrap(),
+                            ]));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Reserve every available card (including piles) if there's a gold
+        // token available. Technically we can reserve a card even there's no
+        // gold token available, but that's unlikely to be useful or necessary.
+        if self.bank[5] > 0 {
+            for (level, market) in self.market.iter().enumerate() {
+                for idx in 0..market.len() {
+                    actions.push(Action::ReserveCard(CardLocation::Market(level + 1, idx)));
+                }
+                if !self.piles[level].is_empty() {
+                    actions.push(Action::ReserveCard(CardLocation::Pile(level + 1)));
+                }
+            }
+        }
+
+        actions
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -315,6 +381,20 @@ pub enum Color {
     Red,
     Black,
     Gold,
+}
+impl TryFrom<usize> for Color {
+    type Error = ();
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Color::White),
+            1 => Ok(Color::Blue),
+            2 => Ok(Color::Green),
+            3 => Ok(Color::Red),
+            4 => Ok(Color::Black),
+            5 => Ok(Color::Gold),
+            _ => Err(()),
+        }
+    }
 }
 
 fn load_from_csv<T: for<'de> Deserialize<'de>>(data: &str) -> Result<Vec<T>, DynError> {
