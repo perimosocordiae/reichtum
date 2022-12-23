@@ -126,17 +126,18 @@ impl GameState {
                 let card = self.take_card(loc)?;
                 let player = &mut self.players[self.curr_player_idx];
                 let card_power = player.purchasing_power(false);
-                let mut missing = 0u8;
                 for (i, &cost) in card.cost.iter().enumerate() {
                     let token_cost = cost.saturating_sub(card_power[i]);
-                    missing += token_cost.saturating_sub(player.tokens[i]);
-                }
-                player.tokens[5] -= missing;
-                self.bank[5] += missing;
-                for (i, &cost) in card.cost.iter().enumerate() {
-                    let token_cost = cost.saturating_sub(card_power[i]);
-                    player.tokens[i] -= token_cost;
-                    self.bank[i] += token_cost;
+                    let missing = token_cost.saturating_sub(player.tokens[i]);
+                    if missing > 0 {
+                        self.bank[5] += missing;
+                        player.tokens[5] -= missing;
+                        self.bank[i] += player.tokens[i];
+                        player.tokens[i] = 0;
+                    } else {
+                        self.bank[i] += token_cost;
+                        player.tokens[i] -= token_cost;
+                    }
                 }
                 player.cards.push(card);
             }
