@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 type DynError = Box<dyn std::error::Error>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct GameState {
     // 3 piles of cards, one per level, face down.
     #[serde(skip)]
@@ -139,7 +139,7 @@ impl GameState {
                         player.tokens[i] -= token_cost;
                     }
                 }
-                player.cards.push(card);
+                player.owned[card.color as usize].push(card.vp);
             }
         }
         // If a player can acquire a noble, they do so.
@@ -327,12 +327,12 @@ struct Noble {
     cost: [u8; 5],
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Player {
     // Token counts: [white, blue, green, red, black, gold]
     tokens: [u8; 6],
-    // Purchased cards
-    cards: Vec<Card>,
+    // Purchased cards: [white, blue, green, red, black]
+    owned: [Vec<u8>; 5],
     // Reserved cards
     reserved: Vec<Card>,
     // Acquired nobles
@@ -342,7 +342,7 @@ impl Player {
     fn default() -> Self {
         Self {
             tokens: [0, 0, 0, 0, 0, 0],
-            cards: Vec::new(),
+            owned: [Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             reserved: Vec::new(),
             nobles: Vec::new(),
         }
@@ -351,15 +351,16 @@ impl Player {
         self.tokens.iter().sum()
     }
     pub fn vp(&self) -> u8 {
-        self.cards.iter().map(|c| c.vp).sum::<u8>() + self.nobles.iter().map(|n| n.vp).sum::<u8>()
+        self.owned.iter().map(|c| c.iter().sum::<u8>()).sum::<u8>()
+            + self.nobles.iter().map(|n| n.vp).sum::<u8>()
     }
     fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
         let mut power: [u8; 5] = [0, 0, 0, 0, 0];
         if include_tokens {
             power.copy_from_slice(&self.tokens[0..5]);
         }
-        for card in &self.cards {
-            power[card.color as usize] += 1;
+        for (i, cards) in self.owned.iter().enumerate() {
+            power[i] += cards.len() as u8;
         }
         power
     }
@@ -441,7 +442,7 @@ fn test_load_nobles_from_csv() {
 fn test_new_player() {
     let p = Player::default();
     assert_eq!(p.tokens, [0, 0, 0, 0, 0, 0]);
-    assert_eq!(p.cards.len(), 0);
+    assert_eq!(p.owned[0].len(), 0);
     assert_eq!(p.nobles.len(), 0);
     assert_eq!(p.vp(), 0);
     assert_eq!(p.purchasing_power(true), [0, 0, 0, 0, 0]);
@@ -472,7 +473,7 @@ fn test_player_can_buy() {
     assert!(p.can_buy(&card));
     p.tokens[0] = 0;
     assert!(!p.can_buy(&card));
-    p.cards.push(card.clone());
+    p.owned[0].push(1);
     assert!(p.can_buy(&card));
 }
 
