@@ -327,7 +327,7 @@ struct Noble {
     cost: [u8; 5],
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Player {
     // Token counts: [white, blue, green, red, black, gold]
     tokens: [u8; 6],
