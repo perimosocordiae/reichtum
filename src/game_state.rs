@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 type DynError = Box<dyn std::error::Error>;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     // 3 piles of cards, one per level, face down.
     #[serde(skip)]
