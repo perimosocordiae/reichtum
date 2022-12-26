@@ -244,8 +244,8 @@ impl GameState {
         // Take tokens from the bank, if possible.
         let num_tokens = player.num_tokens();
         if num_tokens <= 8 {
-            for (i, &token) in self.bank.iter().enumerate() {
-                if token >= 4 {
+            for i in 0..5 {
+                if self.bank[i] >= 4 {
                     actions.push(Action::TakeSameColorTokens(i.try_into().unwrap()));
                 }
             }
