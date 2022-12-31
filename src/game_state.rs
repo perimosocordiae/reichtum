@@ -241,6 +241,22 @@ impl GameState {
                 actions.push(Action::BuyCard(CardLocation::Reserve(idx)));
             }
         }
+
+        // Reserve every available card (including piles) if we have fewer than
+        // 3 reserved already, and if there's a gold token available.
+        // Technically we can reserve a card even there's no gold token
+        // available, but that's unlikely to be useful or necessary.
+        if player.reserved.len() < 3 && self.bank[5] > 0 {
+            for (level, market) in self.market.iter().enumerate() {
+                for idx in 0..market.len() {
+                    actions.push(Action::ReserveCard(CardLocation::Market(level + 1, idx)));
+                }
+                if !self.piles[level].is_empty() {
+                    actions.push(Action::ReserveCard(CardLocation::Pile(level + 1)));
+                }
+            }
+        }
+
         // Take tokens from the bank, if possible.
         let num_tokens = player.num_tokens();
         if num_tokens <= 8 {
@@ -251,7 +267,7 @@ impl GameState {
             }
         }
         // Take up to 3 different color tokens, if possible.
-        // TODO: Handle the case where we only get 1 or 2 tokens from this.
+        let prev_num_actions = actions.len();
         if num_tokens <= 7 {
             for i in 0..3 {
                 if self.bank[i] == 0 {
@@ -273,20 +289,36 @@ impl GameState {
                 }
             }
         }
-
-        // Reserve every available card (including piles) if we have fewer than
-        // 3 reserved already, and if there's a gold token available.
-        // Technically we can reserve a card even there's no gold token
-        // available, but that's unlikely to be useful or necessary.
-        if player.reserved.len() < 3 && self.bank[5] > 0 {
-            for (level, market) in self.market.iter().enumerate() {
-                for idx in 0..market.len() {
-                    actions.push(Action::ReserveCard(CardLocation::Market(level + 1, idx)));
+        // Only take two different color tokens if we can't take three.
+        if num_tokens <= 8 && actions.len() == prev_num_actions {
+            for i in 0..4 {
+                if self.bank[i] == 0 {
+                    continue;
                 }
-                if !self.piles[level].is_empty() {
-                    actions.push(Action::ReserveCard(CardLocation::Pile(level + 1)));
+                for j in i + 1..5 {
+                    if self.bank[j] > 0 {
+                        actions.push(Action::TakeDifferentColorTokens(vec![
+                            i.try_into().unwrap(),
+                            j.try_into().unwrap(),
+                        ]));
+                    }
                 }
             }
+        }
+        // Only take one single token if we can't take two.
+        if num_tokens <= 9 && actions.len() == prev_num_actions {
+            for i in 0..5 {
+                if self.bank[i] > 0 {
+                    actions.push(Action::TakeDifferentColorTokens(vec![i
+                        .try_into()
+                        .unwrap()]));
+                }
+            }
+        }
+
+        // As a last resort, do nothing.
+        if actions.is_empty() {
+            actions.push(Action::TakeDifferentColorTokens(vec![]));
         }
 
         actions
