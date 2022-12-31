@@ -1,4 +1,4 @@
-use rand::prelude::SliceRandom;
+use rand::{prelude::SliceRandom, seq::IteratorRandom};
 use serde::{Deserialize, Serialize};
 
 type DynError = Box<dyn std::error::Error>;
@@ -46,6 +46,8 @@ impl GameState {
         nobles.shuffle(&mut rng);
         nobles.truncate(num_players + 1);
 
+        let curr_player_idx = (0..num_players).choose(&mut rng).unwrap_or(0);
+
         let bank = match num_players {
             2 => [4, 4, 4, 4, 4, 5],
             3 => [5, 5, 5, 5, 5, 5],
@@ -58,7 +60,7 @@ impl GameState {
             nobles,
             bank,
             players: (0..num_players).map(|_| Player::default()).collect(),
-            curr_player_idx: 0,
+            curr_player_idx,
         })
     }
     pub fn take_turn(&mut self, action: &Action) -> Result<bool, DynError> {
