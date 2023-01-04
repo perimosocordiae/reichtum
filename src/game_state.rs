@@ -100,23 +100,25 @@ impl GameState {
                 if self.bank[c] < 4 {
                     return Err("Not enough tokens in bank".into());
                 }
-                if self.players[self.curr_player_idx].num_tokens() + 2 > 10 {
+                let player = &mut self.players[self.curr_player_idx];
+                if player.num_tokens() + 2 > 10 {
                     return Err("Cannot take more than 10 tokens".into());
                 }
                 self.bank[c] -= 2;
-                self.players[self.curr_player_idx].tokens[c] += 2;
+                player.tokens[c] += 2;
             }
             Action::ReserveCard(loc) => {
                 if let CardLocation::Reserve(_) = loc {
                     return Err("Card is already reserved".into());
                 }
-                if self.players[self.curr_player_idx].reserved.len() >= 3 {
+                let player = &self.players[self.curr_player_idx];
+                if player.reserved.len() >= 3 {
                     return Err("At most 3 cards can be reserved".into());
                 }
                 let card = self.take_card(loc)?;
                 let player = &mut self.players[self.curr_player_idx];
                 player.reserved.push(card);
-                if self.bank[5] > 0 {
+                if self.bank[5] > 0 && player.num_tokens() < 10 {
                     self.bank[5] -= 1;
                     player.tokens[5] += 1;
                 }
@@ -168,7 +170,7 @@ impl GameState {
     pub fn is_finished(&self) -> bool {
         self.curr_player_idx >= self.players.len()
     }
-    fn peek_card(&self, loc: &CardLocation) -> Result<&Card, DynError> {
+    pub fn peek_card(&self, loc: &CardLocation) -> Result<&Card, DynError> {
         match loc {
             CardLocation::Pile(level) => self
                 .piles
@@ -245,10 +247,8 @@ impl GameState {
         }
 
         // Reserve every available card (including piles) if we have fewer than
-        // 3 reserved already, and if there's a gold token available.
-        // Technically we can reserve a card even there's no gold token
-        // available, but that's unlikely to be useful or necessary.
-        if player.reserved.len() < 3 && self.bank[5] > 0 {
+        // 3 reserved already.
+        if player.reserved.len() < 3 {
             for (level, market) in self.market.iter().enumerate() {
                 for idx in 0..market.len() {
                     actions.push(Action::ReserveCard(CardLocation::Market(level + 1, idx)));
@@ -343,12 +343,12 @@ pub enum CardLocation {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Card {
+pub struct Card {
     level: usize,
     // Production color
     color: Color,
     // Victory points
-    vp: u8,
+    pub vp: u8,
     // Cost to buy this card: [white, blue, green, red, black]
     cost: [u8; 5],
 }
