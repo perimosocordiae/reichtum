@@ -1,3 +1,4 @@
+use polars::prelude::*;
 use reichtum::agent::create_agent;
 use reichtum::game_state::GameState;
 
@@ -32,11 +33,12 @@ fn main() {
             scores[i].push(p.vp() as i32);
         });
     }
-    for (i, i_scores) in scores.iter().enumerate() {
-        let total = i_scores.iter().sum::<i32>() as f32;
-        let average = total / num_games as f32;
-        println!("Agent {}: {:?}", i, average);
-    }
+    let columns = (0..num_players)
+        .map(|i| Series::new(&format!("Agent {}", i), &scores[i]))
+        .collect::<Vec<_>>();
+    let df = DataFrame::new(columns).unwrap();
+    println!("{}", &df.describe(None));
+
     // TODO:
     //  - Show score box plots for each player
     //  - Compute rankings for each game, then summarize those
