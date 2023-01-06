@@ -14,12 +14,31 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let df = run_games(args.games, &args.agents);
-    println!("{}", &df.describe(None));
+    let scores = run_games(args.games, &args.agents);
+    println!("Scores: {}", &scores.describe(None));
+
+    let agent_names = scores.get_column_names();
+    let rank_opts = RankOptions {
+        method: RankMethod::Ordinal,
+        descending: true,
+    };
+    let each_column = (0..args.agents.len())
+        .map(|i| col("rank").arr().get(lit(i as i64)).alias(agent_names[i]))
+        .collect::<Vec<_>>();
+    let rankings = scores
+        .lazy()
+        .with_column(concat_lst([all()]).alias("all_scores"))
+        .select([col("all_scores")
+            .arr()
+            .eval(col("").rank(rank_opts), true)
+            .alias("rank")])
+        .select(each_column)
+        .collect()
+        .unwrap();
+    println!("Rankings (1=winner): {}", &rankings.describe(None));
 
     // TODO:
     //  - Show score box plots for each player
-    //  - Compute rankings for each game, then summarize those
     //  - Run a wilcoxon signed-rank test to check for significance
     //  - Compute running Elo ratings for each player and plot them
 }
