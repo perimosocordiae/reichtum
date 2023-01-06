@@ -1,4 +1,5 @@
 use clap::Parser;
+use indicatif::ProgressIterator;
 use polars::prelude::*;
 use reichtum::agent::{create_agent, Agent};
 use reichtum::game_state::GameState;
@@ -40,10 +41,7 @@ fn run_games(num_games: usize, players: &[Box<dyn Agent + Send>], names: &[Strin
     let mut scores = (0..num_players)
         .map(|_| Vec::<i32>::new())
         .collect::<Vec<_>>();
-    for i in 0..num_games {
-        if (i + 1) % 100 == 0 {
-            println!("Game {}/{}", i + 1, num_games);
-        }
+    for _ in (0..num_games).progress() {
         let mut gs = GameState::init(num_players).expect("Failed to initialize game state");
         for _turn in 1..=1000 {
             let action = players[gs.curr_player_idx].choose_action(&gs);
