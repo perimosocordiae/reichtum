@@ -1,6 +1,6 @@
 use clap::Parser;
 use polars::prelude::*;
-use reichtum::agent::create_agent;
+use reichtum::agent::{create_agent, Agent};
 use reichtum::game_state::GameState;
 
 #[derive(Parser)]
@@ -13,7 +13,6 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let num_players = args.agents.len();
     let players = args
         .agents
         .clone()
@@ -26,12 +25,24 @@ fn main() {
         .enumerate()
         .map(|(i, lvl)| format!("{}(d={})", (i as u8 + b'A') as char, lvl))
         .collect::<Vec<_>>();
+    let df = run_games(args.games, &players, &agent_names);
+    println!("{}", &df.describe(None));
+
+    // TODO:
+    //  - Show score box plots for each player
+    //  - Compute rankings for each game, then summarize those
+    //  - Run a wilcoxon signed-rank test to check for significance
+    //  - Compute running Elo ratings for each player and plot them
+}
+
+fn run_games(num_games: usize, players: &[Box<dyn Agent + Send>], names: &[String]) -> DataFrame {
+    let num_players = players.len();
     let mut scores = (0..num_players)
         .map(|_| Vec::<i32>::new())
         .collect::<Vec<_>>();
-    for i in 0..args.games {
+    for i in 0..num_games {
         if (i + 1) % 100 == 0 {
-            println!("Game {}/{}", i + 1, args.games);
+            println!("Game {}/{}", i + 1, num_games);
         }
         let mut gs = GameState::init(num_players).expect("Failed to initialize game state");
         for _turn in 1..=1000 {
@@ -42,7 +53,7 @@ fn main() {
                 Err(e) => {
                     println!(
                         "{:?} for agent {} action: {:?}",
-                        e, &agent_names[gs.curr_player_idx], action
+                        e, &names[gs.curr_player_idx], action
                     );
                     println!("{:?}", gs);
                     panic!("Agent logic error")
@@ -53,17 +64,10 @@ fn main() {
             scores[i].push(p.vp() as i32);
         });
     }
-    let columns = agent_names
+    let columns = names
         .iter()
         .enumerate()
         .map(|(i, name)| Series::new(name, &scores[i]))
         .collect::<Vec<_>>();
-    let df = DataFrame::new(columns).unwrap();
-    println!("{}", &df.describe(None));
-
-    // TODO:
-    //  - Show score box plots for each player
-    //  - Compute rankings for each game, then summarize those
-    //  - Run a wilcoxon signed-rank test to check for significance
-    //  - Compute running Elo ratings for each player and plot them
+    DataFrame::new(columns).unwrap()
 }
