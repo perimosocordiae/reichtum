@@ -1,7 +1,7 @@
 use clap::Parser;
 use indicatif::ProgressIterator;
 use polars::prelude::*;
-use reichtum::agent::{create_agent, Agent};
+use reichtum::agent::create_agent;
 use reichtum::game_state::GameState;
 
 #[derive(Parser)]
@@ -14,19 +14,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    let players = args
-        .agents
-        .clone()
-        .into_iter()
-        .map(create_agent)
-        .collect::<Vec<_>>();
-    let agent_names = args
-        .agents
-        .iter()
-        .enumerate()
-        .map(|(i, lvl)| format!("{}(d={})", (i as u8 + b'A') as char, lvl))
-        .collect::<Vec<_>>();
-    let df = run_games(args.games, &players, &agent_names);
+    let df = run_games(args.games, &args.agents);
     println!("{}", &df.describe(None));
 
     // TODO:
@@ -36,8 +24,17 @@ fn main() {
     //  - Compute running Elo ratings for each player and plot them
 }
 
-fn run_games(num_games: usize, players: &[Box<dyn Agent + Send>], names: &[String]) -> DataFrame {
-    let num_players = players.len();
+fn run_games(num_games: usize, agents: &[usize]) -> DataFrame {
+    let num_players = agents.len();
+    let players = agents
+        .iter()
+        .map(|lvl| create_agent(*lvl))
+        .collect::<Vec<_>>();
+    let names = agents
+        .iter()
+        .enumerate()
+        .map(|(i, lvl)| format!("{}(d={})", (i as u8 + b'A') as char, lvl))
+        .collect::<Vec<_>>();
     let mut scores = (0..num_players)
         .map(|_| Vec::<i32>::new())
         .collect::<Vec<_>>();
