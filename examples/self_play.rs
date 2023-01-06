@@ -1,17 +1,37 @@
+use clap::Parser;
 use polars::prelude::*;
 use reichtum::agent::create_agent;
 use reichtum::game_state::GameState;
 
+#[derive(Parser)]
+struct Args {
+    #[clap(short, long, default_value_t = 1000)]
+    games: usize,
+    #[clap(short, long, value_delimiter = ',', default_value = "0,1")]
+    agents: Vec<usize>,
+}
+
 fn main() {
-    let num_games = 1000;
-    let num_players = 2;
-    let players = (0..num_players).map(create_agent).collect::<Vec<_>>();
+    let args = Args::parse();
+    let num_players = args.agents.len();
+    let players = args
+        .agents
+        .clone()
+        .into_iter()
+        .map(create_agent)
+        .collect::<Vec<_>>();
+    let agent_names = args
+        .agents
+        .iter()
+        .enumerate()
+        .map(|(i, lvl)| format!("{}(d={})", (i as u8 + b'A') as char, lvl))
+        .collect::<Vec<_>>();
     let mut scores = (0..num_players)
         .map(|_| Vec::<i32>::new())
         .collect::<Vec<_>>();
-    for i in 0..num_games {
+    for i in 0..args.games {
         if (i + 1) % 100 == 0 {
-            println!("Game {}/{}", i + 1, num_games);
+            println!("Game {}/{}", i + 1, args.games);
         }
         let mut gs = GameState::init(num_players).expect("Failed to initialize game state");
         for _turn in 1..=1000 {
@@ -22,7 +42,7 @@ fn main() {
                 Err(e) => {
                     println!(
                         "{:?} for agent {} action: {:?}",
-                        e, gs.curr_player_idx, action
+                        e, &agent_names[gs.curr_player_idx], action
                     );
                     println!("{:?}", gs);
                     panic!("Agent logic error")
@@ -33,8 +53,10 @@ fn main() {
             scores[i].push(p.vp() as i32);
         });
     }
-    let columns = (0..num_players)
-        .map(|i| Series::new(&format!("Agent {}", i), &scores[i]))
+    let columns = agent_names
+        .iter()
+        .enumerate()
+        .map(|(i, name)| Series::new(name, &scores[i]))
         .collect::<Vec<_>>();
     let df = DataFrame::new(columns).unwrap();
     println!("{}", &df.describe(None));
