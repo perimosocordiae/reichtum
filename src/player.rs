@@ -113,41 +113,111 @@ impl Player {
     }
 }
 
-#[test]
-fn test_new_player() {
-    let p = Player::default();
-    assert_eq!(p.tokens, [0, 0, 0, 0, 0, 0]);
-    assert_eq!(p.owned[0].len(), 0);
-    assert_eq!(p.nobles.len(), 0);
-    assert_eq!(p.vp(), 0);
-    assert_eq!(p.purchasing_power(true), [0, 0, 0, 0, 0]);
-    assert_eq!(p.purchasing_power(false), [0, 0, 0, 0, 0]);
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data_types::Color;
 
-#[test]
-fn test_player_can_buy() {
-    let card = Card {
-        level: 1,
-        color: crate::data_types::Color::White,
-        vp: 1,
-        cost: [1, 0, 0, 2, 0],
-    };
-    let mut p = Player::default();
-    assert!(!p.can_buy(&card));
-    p.tokens[0] = 1;
-    assert!(!p.can_buy(&card));
-    p.tokens[5] = 1;
-    assert!(!p.can_buy(&card));
-    p.tokens[1] = 1;
-    assert!(!p.can_buy(&card));
-    p.tokens[3] = 1;
-    assert!(p.can_buy(&card));
-    p.tokens[5] = 0;
-    assert!(!p.can_buy(&card));
-    p.tokens[3] = 4;
-    assert!(p.can_buy(&card));
-    p.tokens[0] = 0;
-    assert!(!p.can_buy(&card));
-    p.owned[0].push(1);
-    assert!(p.can_buy(&card));
+    #[test]
+    fn default() {
+        let p = Player::default();
+        assert_eq!(p.tokens, [0, 0, 0, 0, 0, 0]);
+        assert_eq!(p.owned[0].len(), 0);
+        assert_eq!(p.nobles.len(), 0);
+        assert_eq!(p.vp(), 0);
+        assert_eq!(p.purchasing_power(true), [0, 0, 0, 0, 0]);
+        assert_eq!(p.purchasing_power(false), [0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn can_buy() {
+        let card = Card {
+            level: 1,
+            color: Color::White,
+            vp: 1,
+            cost: [1, 0, 0, 2, 0],
+        };
+        let mut p = Player::default();
+        assert!(!p.can_buy(&card));
+        p.tokens[0] = 1;
+        assert!(!p.can_buy(&card));
+        p.tokens[5] = 1;
+        assert!(!p.can_buy(&card));
+        p.tokens[1] = 1;
+        assert!(!p.can_buy(&card));
+        p.tokens[3] = 1;
+        assert!(p.can_buy(&card));
+        p.tokens[5] = 0;
+        assert!(!p.can_buy(&card));
+        p.tokens[3] = 4;
+        assert!(p.can_buy(&card));
+        p.tokens[0] = 0;
+        assert!(!p.can_buy(&card));
+        p.owned[0].push(1);
+        assert!(p.can_buy(&card));
+    }
+
+    #[test]
+    fn reserving() {
+        // Initial state.
+        let mut p = Player::default();
+        assert!(p.can_reserve());
+        assert!(p.peek_reserved(0).is_none());
+        assert!(p.pop_reserved(0).is_none());
+        assert_eq!(p.buyable_reserved_cards(), vec![]);
+
+        // Reserve a card.
+        let card = Card {
+            level: 1,
+            color: Color::White,
+            vp: 1,
+            cost: [2, 2, 0, 0, 0],
+        };
+        let mut bank_gold = 3;
+        p.reserve(card, &mut bank_gold);
+        assert_eq!(p.tokens[5], 1);
+        assert_eq!(bank_gold, 2);
+        assert!(p.can_reserve());
+        assert_eq!(p.peek_reserved(0).unwrap().color, Color::White);
+        assert_eq!(p.buyable_reserved_cards(), vec![]);
+
+        // Reserve a second card, this time with no bank gold available.
+        let card = Card {
+            level: 1,
+            color: Color::Blue,
+            vp: 1,
+            cost: [0, 1, 0, 0, 0],
+        };
+        bank_gold = 0;
+        p.reserve(card, &mut bank_gold);
+        assert_eq!(p.tokens[5], 1);
+        assert_eq!(bank_gold, 0);
+        assert!(p.can_reserve());
+        assert_eq!(p.peek_reserved(1).unwrap().color, Color::Blue);
+        assert_eq!(p.buyable_reserved_cards(), vec![1]);
+
+        // Reserve a third card.
+        let card = Card {
+            level: 1,
+            color: Color::Green,
+            vp: 1,
+            cost: [0, 0, 1, 1, 0],
+        };
+        bank_gold = 5;
+        p.reserve(card, &mut bank_gold);
+        assert_eq!(p.tokens[5], 2);
+        assert_eq!(bank_gold, 4);
+        assert!(!p.can_reserve());
+        assert_eq!(p.peek_reserved(2).unwrap().color, Color::Green);
+        assert_eq!(p.buyable_reserved_cards(), vec![1, 2]);
+
+        // Remove the second card.
+        assert_eq!(p.pop_reserved(1).unwrap().color, Color::Blue);
+        assert_eq!(p.tokens[5], 2);
+        assert!(p.can_reserve());
+        assert_eq!(p.peek_reserved(0).unwrap().color, Color::White);
+        assert_eq!(p.peek_reserved(1).unwrap().color, Color::Green);
+        assert!(p.peek_reserved(2).is_none());
+        assert_eq!(p.buyable_reserved_cards(), vec![1]);
+    }
 }

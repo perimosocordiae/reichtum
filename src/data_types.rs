@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Action {
     TakeDifferentColorTokens(Vec<Color>),
     TakeSameColorTokens(Color),
@@ -8,7 +8,7 @@ pub enum Action {
     BuyCard(CardLocation),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum CardLocation {
     Pile(usize),
     Market(usize, usize),

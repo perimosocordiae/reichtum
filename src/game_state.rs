@@ -316,58 +316,175 @@ fn load_from_csv<T: for<'de> Deserialize<'de>>(data: &str) -> Result<Vec<T>, Dyn
     Ok(out)
 }
 
-#[test]
-fn test_load_cards_from_csv() {
-    let cards = load_from_csv::<Card>(
-        "level,color,vp,cost\n\
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_cards_from_csv() {
+        let cards = load_from_csv::<Card>(
+            "level,color,vp,cost\n\
          1,black,0,1,1,1,1,0\n\
          1,black,0,1,2,1,1,0",
-    )
-    .unwrap();
-    assert_eq!(cards.len(), 2);
-}
+        )
+        .unwrap();
+        assert_eq!(cards.len(), 2);
+    }
 
-#[test]
-fn test_load_nobles_from_csv() {
-    let nobles = load_from_csv::<Noble>(
-        "vp,cost\n\
+    #[test]
+    fn load_nobles_from_csv() {
+        let nobles = load_from_csv::<Noble>(
+            "vp,cost\n\
         3,0,0,4,4,0\n\
         3,3,0,0,3,3\n\
         3,4,4,0,0,0",
-    )
-    .unwrap();
-    assert_eq!(nobles.len(), 3);
-}
+        )
+        .unwrap();
+        assert_eq!(nobles.len(), 3);
+    }
 
-#[test]
-fn test_game_state_init() {
-    let gs = GameState::init(2).unwrap();
-    assert_eq!(gs.piles[0].len(), 36);
-    assert_eq!(gs.piles[1].len(), 26);
-    assert_eq!(gs.piles[2].len(), 16);
-    assert_eq!(gs.market[0].len(), 4);
-    assert_eq!(gs.market[1].len(), 4);
-    assert_eq!(gs.market[2].len(), 4);
-    assert_eq!(gs.nobles.len(), 3);
-}
+    #[test]
+    fn init() {
+        let gs = GameState::init(2).unwrap();
+        assert_eq!(gs.piles[0].len(), 36);
+        assert_eq!(gs.piles[1].len(), 26);
+        assert_eq!(gs.piles[2].len(), 16);
+        assert_eq!(gs.market[0].len(), 4);
+        assert_eq!(gs.market[1].len(), 4);
+        assert_eq!(gs.market[2].len(), 4);
+        assert_eq!(gs.nobles.len(), 3);
+    }
 
-#[test]
-fn test_game_turns() {
-    let mut gs = GameState::init(2).unwrap();
-    let starting_idx = gs.curr_player_idx;
-    assert!(!gs
-        .take_turn(&Action::TakeDifferentColorTokens(vec![
-            Color::White,
-            Color::Blue,
-            Color::Green
-        ]))
-        .unwrap());
-    assert_eq!(gs.players[starting_idx].num_tokens(), 3);
-    let other_idx = gs.curr_player_idx;
-    assert_ne!(other_idx, starting_idx);
-    assert!(!gs
-        .take_turn(&Action::TakeSameColorTokens(Color::Red))
-        .unwrap());
-    assert_eq!(gs.players[other_idx].num_tokens(), 2);
-    assert_eq!(gs.curr_player_idx, starting_idx);
+    #[test]
+    fn game_turns() {
+        let mut gs = GameState::init(2).unwrap();
+        let starting_idx = gs.curr_player_idx;
+        assert!(!gs
+            .take_turn(&Action::TakeDifferentColorTokens(vec![
+                Color::White,
+                Color::Blue,
+                Color::Green
+            ]))
+            .unwrap());
+        assert_eq!(gs.players[starting_idx].num_tokens(), 3);
+        let other_idx = gs.curr_player_idx;
+        assert_ne!(other_idx, starting_idx);
+        assert!(!gs
+            .take_turn(&Action::TakeSameColorTokens(Color::Red))
+            .unwrap());
+        assert_eq!(gs.players[other_idx].num_tokens(), 2);
+        assert_eq!(gs.curr_player_idx, starting_idx);
+    }
+
+    #[test]
+    fn initial_valid_actions() {
+        let gs = GameState::init(2).unwrap();
+        assert_eq!(
+            gs.valid_actions(),
+            vec![
+                Action::ReserveCard(CardLocation::Market(1, 0)),
+                Action::ReserveCard(CardLocation::Market(1, 1)),
+                Action::ReserveCard(CardLocation::Market(1, 2)),
+                Action::ReserveCard(CardLocation::Market(1, 3)),
+                Action::ReserveCard(CardLocation::Pile(1)),
+                Action::ReserveCard(CardLocation::Market(2, 0)),
+                Action::ReserveCard(CardLocation::Market(2, 1)),
+                Action::ReserveCard(CardLocation::Market(2, 2)),
+                Action::ReserveCard(CardLocation::Market(2, 3)),
+                Action::ReserveCard(CardLocation::Pile(2)),
+                Action::ReserveCard(CardLocation::Market(3, 0)),
+                Action::ReserveCard(CardLocation::Market(3, 1)),
+                Action::ReserveCard(CardLocation::Market(3, 2)),
+                Action::ReserveCard(CardLocation::Market(3, 3)),
+                Action::ReserveCard(CardLocation::Pile(3)),
+                Action::TakeSameColorTokens(Color::White),
+                Action::TakeSameColorTokens(Color::Blue),
+                Action::TakeSameColorTokens(Color::Green),
+                Action::TakeSameColorTokens(Color::Red),
+                Action::TakeSameColorTokens(Color::Black),
+                Action::TakeDifferentColorTokens(vec![Color::White, Color::Blue, Color::Green]),
+                Action::TakeDifferentColorTokens(vec![Color::White, Color::Blue, Color::Red]),
+                Action::TakeDifferentColorTokens(vec![Color::White, Color::Blue, Color::Black]),
+                Action::TakeDifferentColorTokens(vec![Color::White, Color::Green, Color::Red]),
+                Action::TakeDifferentColorTokens(vec![Color::White, Color::Green, Color::Black]),
+                Action::TakeDifferentColorTokens(vec![Color::White, Color::Red, Color::Black]),
+                Action::TakeDifferentColorTokens(vec![Color::Blue, Color::Green, Color::Red]),
+                Action::TakeDifferentColorTokens(vec![Color::Blue, Color::Green, Color::Black]),
+                Action::TakeDifferentColorTokens(vec![Color::Blue, Color::Red, Color::Black]),
+                Action::TakeDifferentColorTokens(vec![Color::Green, Color::Red, Color::Black])
+            ]
+        );
+    }
+
+    #[test]
+    fn no_valid_actions() {
+        let mut gs = GameState::init(2).unwrap();
+        // Remove all the cards from the market, so we can't buy any.
+        gs.market[0].clear();
+        gs.market[1].clear();
+        gs.market[2].clear();
+
+        {
+            let mut player = &mut gs.players[gs.curr_player_idx];
+            // Fill the player's token quota, so they can't take any more.
+            player.tokens[0] = 10;
+            // Fill the player's reserve, so they can't reserve any more.
+            player.reserve(
+                Card {
+                    level: 1,
+                    color: Color::White,
+                    vp: 0,
+                    cost: [1, 1, 1, 1, 0],
+                },
+                &mut gs.bank[5],
+            );
+            player.reserve(
+                Card {
+                    level: 1,
+                    color: Color::Green,
+                    vp: 0,
+                    cost: [1, 1, 1, 1, 0],
+                },
+                &mut gs.bank[5],
+            );
+            player.reserve(
+                Card {
+                    level: 1,
+                    color: Color::Blue,
+                    vp: 0,
+                    cost: [1, 1, 1, 1, 0],
+                },
+                &mut gs.bank[5],
+            );
+        }
+        assert_eq!(
+            gs.valid_actions(),
+            vec![Action::TakeDifferentColorTokens(vec![])]
+        );
+
+        // If we have 9 tokens, we can take a single token of any available color.
+        gs.players[gs.curr_player_idx].tokens[0] = 9;
+        assert_eq!(
+            gs.valid_actions(),
+            vec![
+                Action::TakeDifferentColorTokens(vec![Color::White]),
+                Action::TakeDifferentColorTokens(vec![Color::Blue]),
+                Action::TakeDifferentColorTokens(vec![Color::Green]),
+                Action::TakeDifferentColorTokens(vec![Color::Red]),
+                Action::TakeDifferentColorTokens(vec![Color::Black])
+            ]
+        );
+
+        // Ensure we omit colors that have no tokens available in the bank.
+        gs.bank[0] = 0;
+        gs.bank[1] = 0;
+        assert_eq!(
+            gs.valid_actions(),
+            vec![
+                Action::TakeDifferentColorTokens(vec![Color::Green]),
+                Action::TakeDifferentColorTokens(vec![Color::Red]),
+                Action::TakeDifferentColorTokens(vec![Color::Black])
+            ]
+        );
+    }
 }
