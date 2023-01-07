@@ -57,6 +57,8 @@ fn score_action(game: &GameState, action: &Action) -> i32 {
             let card = game.peek_card(loc).unwrap();
             card.vp as i32
         }
-        _ => -1,
+        Action::ReserveCard(_loc) => -1,
+        Action::TakeDifferentColorTokens(_colors) => -1,
+        Action::TakeSameColorTokens(_color) => -1,
     }
 }

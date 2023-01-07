@@ -10,13 +10,13 @@ pub struct GameState {
     piles: [Vec<Card>; 3],
 
     // 3 rows of buyable cards, 4 per level, face up.
-    market: [Vec<Card>; 3],
+    pub market: [Vec<Card>; 3],
 
     // Available nobles, face up.
-    nobles: Vec<Noble>,
+    pub nobles: Vec<Noble>,
 
     // Token bank: [white, blue, green, red, black, gold]
-    bank: [u8; 6],
+    pub bank: [u8; 6],
 
     // Players.
     pub players: Vec<Player>,
@@ -172,12 +172,7 @@ impl GameState {
     }
     pub fn peek_card(&self, loc: &CardLocation) -> Result<&Card, DynError> {
         match loc {
-            CardLocation::Pile(level) => self
-                .piles
-                .get(*level - 1)
-                .ok_or("Invalid pile level")?
-                .last()
-                .ok_or_else(|| "No cards left".into()),
+            CardLocation::Pile(_) => Err("No peeking at the pile".into()),
             CardLocation::Market(level, idx) => self
                 .market
                 .get(*level - 1)
@@ -346,19 +341,19 @@ pub enum CardLocation {
 pub struct Card {
     level: usize,
     // Production color
-    color: Color,
+    pub color: Color,
     // Victory points
     pub vp: u8,
     // Cost to buy this card: [white, blue, green, red, black]
-    cost: [u8; 5],
+    pub cost: [u8; 5],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Noble {
+pub struct Noble {
     // Victory points
-    vp: u8,
+    pub vp: u8,
     // Cost to acquire: [white, blue, green, red, black]
-    cost: [u8; 5],
+    pub cost: [u8; 5],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -381,14 +376,14 @@ impl Player {
             nobles: Vec::new(),
         }
     }
-    fn num_tokens(&self) -> u8 {
+    pub fn num_tokens(&self) -> u8 {
         self.tokens.iter().sum()
     }
     pub fn vp(&self) -> u8 {
         self.owned.iter().map(|c| c.iter().sum::<u8>()).sum::<u8>()
             + self.nobles.iter().map(|n| n.vp).sum::<u8>()
     }
-    fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
+    pub fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
         let mut power: [u8; 5] = [0, 0, 0, 0, 0];
         if include_tokens {
             power.copy_from_slice(&self.tokens[0..5]);
