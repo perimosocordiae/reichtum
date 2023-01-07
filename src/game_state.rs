@@ -25,6 +25,7 @@ pub struct GameState {
     pub curr_player_idx: usize,
 
     // Current round number.
+    #[serde(default)]
     round: u16,
 }
 impl GameState {
