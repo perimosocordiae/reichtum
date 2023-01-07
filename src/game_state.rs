@@ -521,7 +521,7 @@ fn test_game_state_init() {
 #[test]
 fn test_game_turns() {
     let mut gs = GameState::init(2).unwrap();
-    assert_eq!(gs.curr_player_idx, 0);
+    let starting_idx = gs.curr_player_idx;
     assert!(!gs
         .take_turn(&Action::TakeDifferentColorTokens(vec![
             Color::White,
@@ -529,11 +529,12 @@ fn test_game_turns() {
             Color::Green
         ]))
         .unwrap());
-    assert_eq!(gs.players[0].num_tokens(), 3);
-    assert_eq!(gs.curr_player_idx, 1);
+    assert_eq!(gs.players[starting_idx].num_tokens(), 3);
+    let other_idx = gs.curr_player_idx;
+    assert_ne!(other_idx, starting_idx);
     assert!(!gs
         .take_turn(&Action::TakeSameColorTokens(Color::Red))
         .unwrap());
-    assert_eq!(gs.players[1].num_tokens(), 2);
-    assert_eq!(gs.curr_player_idx, 0);
+    assert_eq!(gs.players[other_idx].num_tokens(), 2);
+    assert_eq!(gs.curr_player_idx, starting_idx);
 }
