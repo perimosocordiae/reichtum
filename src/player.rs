@@ -13,6 +13,7 @@ pub struct Player {
     pub nobles: Vec<Noble>,
     // VP history: [(round, vp)]
     // NOTE: This is updated by the game state, not the player itself.
+    #[serde(default)]
     pub vp_history: Vec<(u16, u8)>,
 }
 impl Player {
