@@ -30,7 +30,13 @@ impl Player {
         self.tokens.iter().sum()
     }
     pub fn vp(&self) -> u8 {
-        return self.vp_history.last().unwrap().1;
+        // This should almost always have an entry, but older serialized games
+        // may not have it, so we fall back to the old method.
+        if let Some((_, vp)) = self.vp_history.last() {
+            return *vp;
+        }
+        self.nobles.iter().map(|n| n.vp).sum::<u8>()
+            + self.owned.iter().map(|c| c.iter().sum::<u8>()).sum::<u8>()
     }
     pub fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
         let mut power: [u8; 5] = [0, 0, 0, 0, 0];
