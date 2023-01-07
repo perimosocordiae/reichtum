@@ -11,6 +11,9 @@ pub struct Player {
     reserved: Vec<Card>,
     // Acquired nobles
     pub nobles: Vec<Noble>,
+    // VP history: [(round, vp)]
+    // NOTE: This is updated by the game state, not the player itself.
+    pub vp_history: Vec<(u16, u8)>,
 }
 impl Player {
     pub fn default() -> Self {
@@ -19,14 +22,14 @@ impl Player {
             owned: [Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()],
             reserved: Vec::new(),
             nobles: Vec::new(),
+            vp_history: vec![(0, 0)],
         }
     }
     pub fn num_tokens(&self) -> u8 {
         self.tokens.iter().sum()
     }
     pub fn vp(&self) -> u8 {
-        self.owned.iter().map(|c| c.iter().sum::<u8>()).sum::<u8>()
-            + self.nobles.iter().map(|n| n.vp).sum::<u8>()
+        return self.vp_history.last().unwrap().1;
     }
     pub fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
         let mut power: [u8; 5] = [0, 0, 0, 0, 0];
@@ -67,14 +70,18 @@ impl Player {
         let power = self.purchasing_power(false);
         noble.cost.iter().zip(power.iter()).all(|(&c, &p)| c <= p)
     }
-    pub fn acquire_best_noble(&mut self, all_nobles: &mut Vec<Noble>) {
+    pub fn acquire_best_noble(&mut self, all_nobles: &mut Vec<Noble>) -> u8 {
         let best_noble = all_nobles
             .iter()
             .enumerate()
             .filter(|(_, n)| self.can_acquire(n))
             .max_by_key(|(_, n)| n.vp);
-        if let Some((idx, _)) = best_noble {
+        if let Some((idx, n)) = best_noble {
+            let vp = n.vp;
             self.nobles.push(all_nobles.remove(idx));
+            vp
+        } else {
+            0
         }
     }
     pub fn can_reserve(&self) -> bool {

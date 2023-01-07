@@ -23,6 +23,9 @@ pub struct GameState {
     // Players.
     pub players: Vec<Player>,
     pub curr_player_idx: usize,
+
+    // Current round number.
+    round: u16,
 }
 impl GameState {
     pub fn init(num_players: usize) -> Result<GameState, DynError> {
@@ -63,12 +66,15 @@ impl GameState {
             bank,
             players: (0..num_players).map(|_| Player::default()).collect(),
             curr_player_idx,
+            round: 1,
         })
     }
     fn curr_player(&self) -> &Player {
         &self.players[self.curr_player_idx]
     }
     pub fn take_turn(&mut self, action: &Action) -> Result<bool, DynError> {
+        let old_vp = self.curr_player().vp();
+        let mut new_vp = old_vp;
         match action {
             Action::TakeDifferentColorTokens(colors) => {
                 if colors.len() > 3 {
@@ -126,20 +132,30 @@ impl GameState {
                     return Err("Cannot afford card".into());
                 }
                 let card = self.take_card(loc)?;
+                new_vp += card.vp;
                 self.players[self.curr_player_idx].buy(card, &mut self.bank);
             }
         }
         // If a player can acquire a noble, they do so.
-        // Only one noble is acquired per turn.
-        self.players[self.curr_player_idx].acquire_best_noble(&mut self.nobles);
-        // Check for game over.
-        if self.curr_player().vp() >= 15 {
-            // Invalid player index indicates that the game is over.
-            self.curr_player_idx = self.players.len();
-            return Ok(true);
+        // At most one noble can be acquired per player per round.
+        new_vp += self.players[self.curr_player_idx].acquire_best_noble(&mut self.nobles);
+        // Update the player's VP history, if they gained VP.
+        if new_vp > old_vp {
+            self.players[self.curr_player_idx]
+                .vp_history
+                .push((self.round, new_vp));
         }
         // Advance to the next player.
-        self.curr_player_idx = (self.curr_player_idx + 1) % self.players.len();
+        self.curr_player_idx += 1;
+        // If the round is over, check if the game is over too.
+        if self.curr_player_idx == self.players.len() {
+            // If any player has 15+ VP, the game is over.
+            if self.players.iter().any(|p| p.vp() >= 15) {
+                return Ok(true);
+            }
+            self.round += 1;
+            self.curr_player_idx = 0;
+        }
         Ok(false)
     }
     pub fn is_finished(&self) -> bool {
