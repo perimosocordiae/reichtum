@@ -69,7 +69,7 @@ impl GameState {
             round: 1,
         })
     }
-    fn curr_player(&self) -> &Player {
+    pub fn curr_player(&self) -> &Player {
         &self.players[self.curr_player_idx]
     }
     pub fn take_turn(&mut self, action: &Action) -> Result<bool, DynError> {

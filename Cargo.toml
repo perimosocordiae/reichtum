@@ -1,6 +1,6 @@
 [package]
 name = "reichtum"
-version = "0.1.11"
+version = "0.1.12"
 authors = ["CJ Carey <perimosocordiae@gmail.com>"]
 edition = "2021"
 
