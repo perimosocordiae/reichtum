@@ -1,3 +1,5 @@
+use crate::data_types::{Action, Card, CardLocation, Color, Noble};
+use crate::player::Player;
 use rand::{prelude::SliceRandom, seq::IteratorRandom};
 use serde::{Deserialize, Serialize};
 
@@ -63,6 +65,9 @@ impl GameState {
             curr_player_idx,
         })
     }
+    fn curr_player(&self) -> &Player {
+        &self.players[self.curr_player_idx]
+    }
     pub fn take_turn(&mut self, action: &Action) -> Result<bool, DynError> {
         match action {
             Action::TakeDifferentColorTokens(colors) => {
@@ -80,10 +85,10 @@ impl GameState {
                         return Err("Cannot take the same color twice".into());
                     }
                 }
-                let player = &mut self.players[self.curr_player_idx];
-                if player.num_tokens() as usize + colors.len() > 10 {
+                if self.curr_player().num_tokens() as usize + colors.len() > 10 {
                     return Err("Cannot take more than 10 tokens".into());
                 }
+                let player = &mut self.players[self.curr_player_idx];
                 for &color in colors {
                     let c = color as usize;
                     if self.bank[c] > 0 {
@@ -100,65 +105,35 @@ impl GameState {
                 if self.bank[c] < 4 {
                     return Err("Not enough tokens in bank".into());
                 }
-                let player = &mut self.players[self.curr_player_idx];
-                if player.num_tokens() + 2 > 10 {
+                if self.curr_player().num_tokens() + 2 > 10 {
                     return Err("Cannot take more than 10 tokens".into());
                 }
                 self.bank[c] -= 2;
-                player.tokens[c] += 2;
+                self.players[self.curr_player_idx].tokens[c] += 2;
             }
             Action::ReserveCard(loc) => {
                 if let CardLocation::Reserve(_) = loc {
                     return Err("Card is already reserved".into());
                 }
-                let player = &self.players[self.curr_player_idx];
-                if player.reserved.len() >= 3 {
+                if !self.curr_player().can_reserve() {
                     return Err("At most 3 cards can be reserved".into());
                 }
                 let card = self.take_card(loc)?;
-                let player = &mut self.players[self.curr_player_idx];
-                player.reserved.push(card);
-                if self.bank[5] > 0 && player.num_tokens() < 10 {
-                    self.bank[5] -= 1;
-                    player.tokens[5] += 1;
-                }
+                self.players[self.curr_player_idx].reserve(card, &mut self.bank[5]);
             }
             Action::BuyCard(loc) => {
-                if !self.players[self.curr_player_idx].can_buy(self.peek_card(loc)?) {
+                if !self.curr_player().can_buy(self.peek_card(loc)?) {
                     return Err("Cannot afford card".into());
                 }
                 let card = self.take_card(loc)?;
-                let player = &mut self.players[self.curr_player_idx];
-                let card_power = player.purchasing_power(false);
-                for (i, &cost) in card.cost.iter().enumerate() {
-                    let token_cost = cost.saturating_sub(card_power[i]);
-                    let missing = token_cost.saturating_sub(player.tokens[i]);
-                    if missing > 0 {
-                        self.bank[5] += missing;
-                        player.tokens[5] -= missing;
-                        self.bank[i] += player.tokens[i];
-                        player.tokens[i] = 0;
-                    } else {
-                        self.bank[i] += token_cost;
-                        player.tokens[i] -= token_cost;
-                    }
-                }
-                player.owned[card.color as usize].push(card.vp);
+                self.players[self.curr_player_idx].buy(card, &mut self.bank);
             }
         }
         // If a player can acquire a noble, they do so.
         // Only one noble is acquired per turn.
-        let player = &mut self.players[self.curr_player_idx];
-        let mut acquirable_nobles = self
-            .nobles
-            .iter()
-            .enumerate()
-            .filter(|(_, n)| player.can_acquire(n));
-        if let Some((idx, _)) = acquirable_nobles.next() {
-            player.nobles.push(self.nobles.remove(idx));
-        }
+        self.players[self.curr_player_idx].acquire_best_noble(&mut self.nobles);
         // Check for game over.
-        if player.vp() >= 15 {
+        if self.curr_player().vp() >= 15 {
             // Invalid player index indicates that the game is over.
             self.curr_player_idx = self.players.len();
             return Ok(true);
@@ -180,11 +155,8 @@ impl GameState {
                 .get(*idx)
                 .ok_or_else(|| "Invalid market index".into()),
             CardLocation::Reserve(idx) => self
-                .players
-                .get(self.curr_player_idx)
-                .ok_or("Invalid player")?
-                .reserved
-                .get(*idx)
+                .curr_player()
+                .peek_reserved(*idx)
                 .ok_or_else(|| "Invalid reserve index".into()),
         }
     }
@@ -214,18 +186,14 @@ impl GameState {
                     market.swap_remove(*idx)
                 })
             }
-            CardLocation::Reserve(idx) => {
-                let player = &mut self.players[self.curr_player_idx];
-                if !(0..player.reserved.len()).contains(idx) {
-                    return Err("Invalid reservation".into());
-                }
-                Ok(player.reserved.remove(*idx))
-            }
+            CardLocation::Reserve(idx) => self.players[self.curr_player_idx]
+                .pop_reserved(*idx)
+                .ok_or_else(|| "Invalid reserve index".into()),
         }
     }
     pub fn valid_actions(&self) -> Vec<Action> {
         let mut actions = Vec::new();
-        let player = &self.players[self.curr_player_idx];
+        let player = self.curr_player();
         // Try to buy every available card in the market.
         for (level, market) in self.market.iter().enumerate() {
             for (idx, card) in market.iter().enumerate() {
@@ -235,15 +203,13 @@ impl GameState {
             }
         }
         // Try to buy every reserved card.
-        for (idx, card) in player.reserved.iter().enumerate() {
-            if player.can_buy(card) {
-                actions.push(Action::BuyCard(CardLocation::Reserve(idx)));
-            }
+        for idx in player.buyable_reserved_cards() {
+            actions.push(Action::BuyCard(CardLocation::Reserve(idx)));
         }
 
         // Reserve every available card (including piles) if we have fewer than
         // 3 reserved already.
-        if player.reserved.len() < 3 {
+        if player.can_reserve() {
             for (level, market) in self.market.iter().enumerate() {
                 for idx in 0..market.len() {
                     actions.push(Action::ReserveCard(CardLocation::Market(level + 1, idx)));
@@ -322,116 +288,6 @@ impl GameState {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Action {
-    TakeDifferentColorTokens(Vec<Color>),
-    TakeSameColorTokens(Color),
-    ReserveCard(CardLocation),
-    BuyCard(CardLocation),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum CardLocation {
-    Pile(usize),
-    Market(usize, usize),
-    Reserve(usize),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Card {
-    level: usize,
-    // Production color
-    pub color: Color,
-    // Victory points
-    pub vp: u8,
-    // Cost to buy this card: [white, blue, green, red, black]
-    pub cost: [u8; 5],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Noble {
-    // Victory points
-    pub vp: u8,
-    // Cost to acquire: [white, blue, green, red, black]
-    pub cost: [u8; 5],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Player {
-    // Token counts: [white, blue, green, red, black, gold]
-    tokens: [u8; 6],
-    // Purchased cards: [white, blue, green, red, black]
-    owned: [Vec<u8>; 5],
-    // Reserved cards
-    reserved: Vec<Card>,
-    // Acquired nobles
-    nobles: Vec<Noble>,
-}
-impl Player {
-    fn default() -> Self {
-        Self {
-            tokens: [0, 0, 0, 0, 0, 0],
-            owned: [Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            reserved: Vec::new(),
-            nobles: Vec::new(),
-        }
-    }
-    pub fn num_tokens(&self) -> u8 {
-        self.tokens.iter().sum()
-    }
-    pub fn vp(&self) -> u8 {
-        self.owned.iter().map(|c| c.iter().sum::<u8>()).sum::<u8>()
-            + self.nobles.iter().map(|n| n.vp).sum::<u8>()
-    }
-    pub fn purchasing_power(&self, include_tokens: bool) -> [u8; 5] {
-        let mut power: [u8; 5] = [0, 0, 0, 0, 0];
-        if include_tokens {
-            power.copy_from_slice(&self.tokens[0..5]);
-        }
-        for (i, cards) in self.owned.iter().enumerate() {
-            power[i] += cards.len() as u8;
-        }
-        power
-    }
-    fn can_buy(&self, card: &Card) -> bool {
-        let power = self.purchasing_power(true);
-        let mut missing = 0u8;
-        for (i, &cost) in card.cost.iter().enumerate() {
-            missing += cost.saturating_sub(power[i]);
-        }
-        self.tokens[5] >= missing
-    }
-    fn can_acquire(&self, noble: &Noble) -> bool {
-        let power = self.purchasing_power(false);
-        noble.cost.iter().zip(power.iter()).all(|(&c, &p)| c <= p)
-    }
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "lowercase")]
-pub enum Color {
-    White,
-    Blue,
-    Green,
-    Red,
-    Black,
-    Gold,
-}
-impl TryFrom<usize> for Color {
-    type Error = ();
-    fn try_from(value: usize) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(Color::White),
-            1 => Ok(Color::Blue),
-            2 => Ok(Color::Green),
-            3 => Ok(Color::Red),
-            4 => Ok(Color::Black),
-            5 => Ok(Color::Gold),
-            _ => Err(()),
-        }
-    }
-}
-
 fn load_from_csv<T: for<'de> Deserialize<'de>>(data: &str) -> Result<Vec<T>, DynError> {
     let mut rdr = csv::ReaderBuilder::new()
         .flexible(true)
@@ -465,45 +321,6 @@ fn test_load_nobles_from_csv() {
     )
     .unwrap();
     assert_eq!(nobles.len(), 3);
-}
-
-#[test]
-fn test_new_player() {
-    let p = Player::default();
-    assert_eq!(p.tokens, [0, 0, 0, 0, 0, 0]);
-    assert_eq!(p.owned[0].len(), 0);
-    assert_eq!(p.nobles.len(), 0);
-    assert_eq!(p.vp(), 0);
-    assert_eq!(p.purchasing_power(true), [0, 0, 0, 0, 0]);
-    assert_eq!(p.purchasing_power(false), [0, 0, 0, 0, 0]);
-}
-
-#[test]
-fn test_player_can_buy() {
-    let card = Card {
-        level: 1,
-        color: Color::White,
-        vp: 1,
-        cost: [1, 0, 0, 2, 0],
-    };
-    let mut p = Player::default();
-    assert!(!p.can_buy(&card));
-    p.tokens[0] = 1;
-    assert!(!p.can_buy(&card));
-    p.tokens[5] = 1;
-    assert!(!p.can_buy(&card));
-    p.tokens[1] = 1;
-    assert!(!p.can_buy(&card));
-    p.tokens[3] = 1;
-    assert!(p.can_buy(&card));
-    p.tokens[5] = 0;
-    assert!(!p.can_buy(&card));
-    p.tokens[3] = 4;
-    assert!(p.can_buy(&card));
-    p.tokens[0] = 0;
-    assert!(!p.can_buy(&card));
-    p.owned[0].push(1);
-    assert!(p.can_buy(&card));
 }
 
 #[test]

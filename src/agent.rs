@@ -1,4 +1,5 @@
-use crate::game_state::{Action, GameState};
+use crate::data_types::Action;
+use crate::game_state::GameState;
 use rand::seq::SliceRandom;
 
 pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
