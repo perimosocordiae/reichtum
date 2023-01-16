@@ -10,11 +10,20 @@ struct Args {
     games: usize,
     #[clap(short, long, value_delimiter = ',', default_value = "0,1")]
     agents: Vec<usize>,
+    #[clap(short, long, default_value_t = false)]
+    verbose: bool,
 }
 
 fn main() {
     let args = Args::parse();
-    let scores = run_games(args.games, &args.agents);
+    let mut scores = run_games(args.games, &args.agents);
+    if args.verbose {
+        CsvWriter::new(&mut std::io::stdout())
+            .has_header(true)
+            .finish(&mut scores)
+            .unwrap();
+        return;
+    }
     println!("Scores: {}", &scores.describe(None));
 
     let agent_names = scores.get_column_names();
