@@ -1,6 +1,6 @@
 use crate::data_types::{Action, CardLocation};
 use crate::game_state::GameState;
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 
 pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
     match difficulty {
@@ -35,7 +35,7 @@ pub trait Agent {
 pub struct RandomAgent;
 impl Agent for RandomAgent {
     fn choose_action(&self, game: &GameState) -> Action {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let actions = game.valid_actions();
         if let Some(m) = actions.choose(&mut rng) {
             m.clone()
@@ -65,7 +65,7 @@ impl Agent for GreedyAgent {
             .filter(|(_, s)| s == best_score)
             .map(|(a, _)| *a)
             .collect();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let best = best_actions.choose(&mut rng).unwrap();
         (*best).clone()
     }

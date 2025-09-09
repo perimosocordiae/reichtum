@@ -38,7 +38,7 @@ impl GameState {
         for card in cards {
             market[card.level - 1].push(card);
         }
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         market[0].shuffle(&mut rng);
         market[1].shuffle(&mut rng);
         market[2].shuffle(&mut rng);
@@ -426,7 +426,7 @@ mod tests {
         gs.market[2].clear();
 
         {
-            let mut player = &mut gs.players[gs.curr_player_idx];
+            let player = &mut gs.players[gs.curr_player_idx];
             // Fill the player's token quota, so they can't take any more.
             player.tokens[0] = 10;
             // Fill the player's reserve, so they can't reserve any more.
