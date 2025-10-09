@@ -171,7 +171,7 @@ mod tests {
         assert!(p.can_reserve());
         assert!(p.peek_reserved(0).is_none());
         assert!(p.pop_reserved(0).is_none());
-        assert_eq!(p.buyable_reserved_cards(), vec![]);
+        assert_eq!(p.buyable_reserved_cards(), Vec::<usize>::new());
 
         // Reserve a card.
         let card = Card {
@@ -186,7 +186,7 @@ mod tests {
         assert_eq!(bank_gold, 2);
         assert!(p.can_reserve());
         assert_eq!(p.peek_reserved(0).unwrap().color, Color::White);
-        assert_eq!(p.buyable_reserved_cards(), vec![]);
+        assert_eq!(p.buyable_reserved_cards(), Vec::<usize>::new());
 
         // Reserve a second card, this time with no bank gold available.
         let card = Card {

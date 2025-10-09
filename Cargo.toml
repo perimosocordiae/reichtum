@@ -1,13 +1,15 @@
 [package]
 name = "reichtum"
-version = "0.1.17"
+version = "0.1.18"
 authors = ["CJ Carey <perimosocordiae@gmail.com>"]
 edition = "2024"
 
 [dependencies]
+blau_api = { git = "https://github.com/perimosocordiae/blau_api" }
 csv = "1.1"
 rand = "0.9"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 clap = { version = "4", features = ["derive"] }

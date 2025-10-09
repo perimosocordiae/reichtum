@@ -289,9 +289,9 @@ impl GameState {
         if num_tokens <= 9 && actions.len() == prev_num_actions {
             for i in 0..5 {
                 if self.bank[i] > 0 {
-                    actions.push(Action::TakeDifferentColorTokens(vec![i
-                        .try_into()
-                        .unwrap()]));
+                    actions.push(Action::TakeDifferentColorTokens(vec![
+                        i.try_into().unwrap(),
+                    ]));
                 }
             }
         }
@@ -360,19 +360,21 @@ mod tests {
     fn game_turns() {
         let mut gs = GameState::init(2).unwrap();
         let starting_idx = gs.curr_player_idx;
-        assert!(!gs
-            .take_turn(&Action::TakeDifferentColorTokens(vec![
+        assert!(
+            !gs.take_turn(&Action::TakeDifferentColorTokens(vec![
                 Color::White,
                 Color::Blue,
                 Color::Green
             ]))
-            .unwrap());
+            .unwrap()
+        );
         assert_eq!(gs.players[starting_idx].num_tokens(), 3);
         let other_idx = gs.curr_player_idx;
         assert_ne!(other_idx, starting_idx);
-        assert!(!gs
-            .take_turn(&Action::TakeSameColorTokens(Color::Red))
-            .unwrap());
+        assert!(
+            !gs.take_turn(&Action::TakeSameColorTokens(Color::Red))
+                .unwrap()
+        );
         assert_eq!(gs.players[other_idx].num_tokens(), 2);
         assert_eq!(gs.curr_player_idx, starting_idx);
     }
