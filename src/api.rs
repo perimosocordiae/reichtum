@@ -101,9 +101,14 @@ impl GameAPI for ReichtumAPI {
     }
 
     fn restore(player_ids: &[PlayerInfo], final_state: &str) -> Result<Self> {
-        let fs: FinalState = serde_json::from_str(final_state)?;
+        // For back-compat, try deserializing both FinalState and a raw
+        // GameState struct here.
+        let state = match serde_json::from_str::<FinalState>(final_state) {
+            Ok(fs) => fs.game,
+            Err(_) => serde_json::from_str::<GameState>(final_state)?,
+        };
         Ok(Self {
-            state: fs.game,
+            state,
             player_ids: player_ids.iter().map(|p| p.id.clone()).collect(),
             agents: Vec::new(), // No agents when restoring
             game_over: true,
