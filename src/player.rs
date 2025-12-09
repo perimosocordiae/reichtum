@@ -29,6 +29,9 @@ impl Player {
     pub fn num_tokens(&self) -> u8 {
         self.tokens.iter().sum()
     }
+    pub fn num_owned_cards(&self) -> usize {
+        self.owned.iter().map(|c| c.len()).sum()
+    }
     pub fn vp(&self) -> u8 {
         // This should almost always have an entry, but older serialized games
         // may not have it, so we fall back to the old method.
@@ -132,8 +135,20 @@ mod tests {
         assert_eq!(p.owned[0].len(), 0);
         assert_eq!(p.nobles.len(), 0);
         assert_eq!(p.vp(), 0);
+        assert_eq!(p.num_owned_cards(), 0);
         assert_eq!(p.purchasing_power(true), [0, 0, 0, 0, 0]);
         assert_eq!(p.purchasing_power(false), [0, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn num_owned_cards() {
+        let mut p = Player::default();
+        assert_eq!(p.num_owned_cards(), 0);
+        // Add some cards
+        p.owned[0].push(1);
+        p.owned[1].push(2);
+        p.owned[1].push(3);
+        assert_eq!(p.num_owned_cards(), 3);
     }
 
     #[test]
