@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     agent::{Agent, create_agent},
-    data_types::Action,
+    data_types::{Action, Card, Color},
     game_state::GameState,
 };
 
@@ -50,8 +50,14 @@ impl ReichtumAPI {
             .filter(|(_, p)| p.vp() == max_vp)
             .map(|(i, _)| i)
             .collect::<Vec<_>>();
-        // TODO: Check for ties, break by number of owned cards.
-        Some(&self.player_ids[max_indices[0]])
+
+        // In case of a tie, the player who has purchased the fewest development cards wins.
+        let winner_idx = max_indices
+            .iter()
+            .min_by_key(|&&i| self.state.players[i].num_owned_cards())
+            .unwrap();
+
+        Some(&self.player_ids[*winner_idx])
     }
     fn do_action<F: FnMut(&str, &str)>(&mut self, action: &Action, mut notice_cb: F) -> Result<()> {
         self.game_over = self.state.take_turn(action)?;
@@ -206,4 +212,50 @@ fn exercise_api() {
     .unwrap();
     // foo's turn and bot's turn should both generate notices.
     assert_eq!(num_notices, 2);
+}
+
+#[test]
+fn test_winner_id_tie_breaker() {
+    let players = vec![
+        PlayerInfo::human("p1".into()),
+        PlayerInfo::human("p2".into()),
+    ];
+    let mut game: ReichtumAPI = GameAPI::init(&players, None).unwrap();
+
+    // Manually setup state
+    // Player 1 (index 0): 15 VP, 15 cards
+    for _ in 0..15 {
+        let card = Card {
+            level: 1,
+            color: Color::White,
+            vp: 1,
+            cost: [0, 0, 0, 0, 0],
+        };
+        game.state.players[0].buy(card, &mut game.state.bank);
+    }
+    game.state.players[0].vp_history.push((1, 15));
+    assert_eq!(game.state.players[0].vp(), 15);
+    assert_eq!(game.state.players[0].num_owned_cards(), 15);
+
+    // Player 2 (index 1): 15 VP, 5 cards (each 3 VP)
+    for _ in 0..5 {
+        let card = Card {
+            level: 2,
+            color: Color::Blue,
+            vp: 3,
+            cost: [0, 0, 0, 0, 0],
+        };
+        game.state.players[1].buy(card, &mut game.state.bank);
+    }
+    game.state.players[1].vp_history.push((1, 15));
+    assert_eq!(game.state.players[1].vp(), 15);
+    assert_eq!(game.state.players[1].num_owned_cards(), 5);
+
+    // Finish the game
+    game.state.curr_player_idx = 2; // >= num_players (2)
+    assert!(game.state.is_finished());
+
+    // Without fix: p1 is winner (index 0) because it's first in max_indices
+    // With fix: p2 should be winner (fewer cards)
+    assert_eq!(game.winner_id(), Some("p2"));
 }
