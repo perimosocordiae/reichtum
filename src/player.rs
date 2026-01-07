@@ -8,7 +8,7 @@ pub struct Player {
     // Purchased cards: [white, blue, green, red, black]
     owned: [Vec<u8>; 5],
     // Reserved cards
-    reserved: Vec<Card>,
+    pub reserved: Vec<Card>,
     // Acquired nobles
     pub nobles: Vec<Noble>,
     // VP history: [(round, vp)]
