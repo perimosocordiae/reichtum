@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     agent::{Agent, create_agent},
-    data_types::{Action, Card, Color},
+    data_types::Action,
     game_state::GameState,
 };
+#[cfg(test)]
+use crate::data_types::{Card, Color};
 
 /// Final data to store for viewing completed games.
 #[derive(Serialize, Deserialize)]
