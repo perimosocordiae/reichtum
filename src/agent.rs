@@ -6,7 +6,7 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
     match difficulty {
         // Completely random actions.
         0 => Box::<RandomAgent>::default(),
-        // Only cares about VP.
+        // Weak Greedy Agent (Balanced but low VP bonus).
         1 => Box::new(GreedyAgent {
             bonuses: ScoringBonuses {
                 vp: 100,
@@ -15,8 +15,8 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
                 reserve_discount: 10,
             },
         }),
-        // Balances raw VP, nobles, and card purchasing power.
-        _ => Box::new(GreedyAgent {
+        // Strong Greedy Agent (High VP bonus).
+        2 => Box::new(GreedyAgent {
             bonuses: ScoringBonuses {
                 vp: 1000,
                 card_needed: 10,
@@ -24,6 +24,8 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
                 reserve_discount: 10,
             },
         }),
+        // Smart Agent
+        _ => Box::new(SmartAgent),
     }
 }
 
@@ -146,5 +148,118 @@ impl ScoringInfo {
                 }
             }
         }
+    }
+}
+
+pub struct SmartAgent;
+
+impl Agent for SmartAgent {
+    fn choose_action(&self, game: &GameState) -> Action {
+        let actions = game.valid_actions();
+        if actions.len() == 1 {
+            return actions[0].clone();
+        }
+
+        let me = game.curr_player();
+        let my_vp = me.vp() as i32;
+        let gems = me.purchasing_power(false);
+
+        // 1. Check for Winning Move (BuyCard that reaches 15 VP, including nobles)
+        for action in &actions {
+            if let Action::BuyCard(loc) = action {
+                let card = game.peek_card(loc).unwrap();
+                let card_vp = card.vp as i32;
+
+                // Calculate if this triggers a noble
+                let mut noble_vp = 0;
+                let card_color = card.color as usize;
+                for noble in &game.nobles {
+                     // Check if we meet requirements AFTER buying this card
+                     // We need noble.cost <= current gems + new card
+                     let mut meets = true;
+                     for (i, &cost) in noble.cost.iter().enumerate() {
+                         let my_gem_count = gems[i] + if i == card_color { 1 } else { 0 };
+                         if my_gem_count < cost {
+                             meets = false;
+                             break;
+                         }
+                     }
+                     // Also, we must not ALREADY have this noble (but game.nobles only contains available ones)
+                     if meets {
+                         noble_vp += noble.vp as i32;
+                     }
+                }
+
+                if my_vp + card_vp + noble_vp >= 15 {
+                    return action.clone();
+                }
+            }
+        }
+
+        // 2. Fallback to Strong Greedy Strategy (d=2)
+        // But with slight bias for Noble proximity (Greedy doesn't see Noble proximity well)
+
+        let bonuses = ScoringBonuses {
+            vp: 1000,
+            card_needed: 10,
+            color_needed: 1,
+            reserve_discount: 10,
+        };
+        let info = ScoringInfo::new(game);
+
+        let mut best_action = &actions[0];
+        let mut best_score = i32::MIN;
+
+        for action in &actions {
+            let mut score = info.score_action(game, action, &bonuses);
+
+            // Add Smart Heuristics on top of Greedy Score
+
+            if let Action::BuyCard(loc) = action {
+                let card = game.peek_card(loc).unwrap();
+                let card_color = card.color as usize;
+
+                // Bonus for getting CLOSER to a noble (Greedy only cares about linear distance)
+                // We reward being 1 turn away.
+                for noble in &game.nobles {
+                    let needed = noble.cost[card_color].saturating_sub(gems[card_color]);
+                    if needed > 0 {
+                         // This card helps.
+                         // Calculate remaining distance for ALL colors
+                         let mut dist = 0;
+                         for (i, &cost) in noble.cost.iter().enumerate() {
+                             let my_count = gems[i] + if i == card_color { 1 } else { 0 };
+                             dist += cost.saturating_sub(my_count);
+                         }
+
+                         if dist == 0 {
+                             score += 2500; // Triggers noble (less than 15 VP win, but huge)
+                             // Note: Greedy sees 3 VP noble? No, Greedy doesn't see noble trigger in score_action.
+                             // acquire_best_noble is in take_turn.
+                             // So Greedy totally misses that a card triggers a noble!
+                         } else if dist <= 1 {
+                             score += 500; // Almost there
+                         }
+                    }
+                }
+            }
+
+            // Penalty for hoarding tokens (Greedy doesn't care)
+            if let Action::TakeDifferentColorTokens(_) | Action::TakeSameColorTokens(_) = action {
+                if me.num_tokens() >= 8 {
+                    score -= 200;
+                }
+            }
+
+            if score > best_score {
+                best_score = score;
+                best_action = action;
+            }
+        }
+
+        // Random tie-break
+        // (Simplified: just take first best)
+
+        best_action.clone()
     }
 }
