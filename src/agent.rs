@@ -6,7 +6,7 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
     match difficulty {
         // Completely random actions.
         0 => Box::<RandomAgent>::default(),
-        // Weak Greedy Agent (Balanced but low VP bonus).
+        // Weak Greedy Agent (only looks at raw VP gain).
         1 => Box::new(GreedyAgent {
             bonuses: ScoringBonuses {
                 vp: 100,
@@ -15,7 +15,7 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
                 reserve_discount: 10,
             },
         }),
-        // Strong Greedy Agent (High VP bonus).
+        // Strong Greedy Agent (prioritizes progress toward cards + nobles).
         2 => Box::new(GreedyAgent {
             bonuses: ScoringBonuses {
                 vp: 1000,
@@ -24,7 +24,7 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
                 reserve_discount: 10,
             },
         }),
-        // Smart Agent
+        // Smart Agent (strong greedy + extra heuristics).
         _ => Box::new(SmartAgent),
     }
 }
@@ -78,6 +78,10 @@ struct ScoringBonuses {
     card_needed: i32,
     color_needed: i32,
     reserve_discount: i32,
+    // TODO: add `spend_cost` here such that, when it's > 0, scoring will
+    // prefer buying cards that require spending fewer tokens, esp. gold.
+    // Then introduce a new GreedyAgent difficulty level (3) that uses it to
+    // measure how much it helps.
 }
 
 struct ScoringInfo {
