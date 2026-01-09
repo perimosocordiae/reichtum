@@ -1,9 +1,19 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "numpy",
+#     "pandas",
+#     "scipy",
+#     "tabulate",
+# ]
+# ///
 import sys
 import argparse
-import pandas as pd
 import numpy as np
+import pandas as pd
 import scipy.stats as st
+
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze Reichtum self-play results")
@@ -11,62 +21,51 @@ def main():
     args = parser.parse_args()
 
     # Read the CSV file
-    # The output format from 'self_play' example seems to be "ScoreA,ScoreB" (no header or header "A(d=X),B(d=Y)")
-    # Based on previous runs, it has a header.
-
     try:
-        df = pd.read_csv(args.input_file)
+        df = pd.read_csv(args.input_file if args.input_file != "-" else sys.stdin)
     except Exception as e:
         print(f"Error reading file: {e}")
         sys.exit(1)
 
-    # Assuming columns are like "A(d=X)", "B(d=Y)"
     if len(df.columns) < 2:
         print("Error: Input file must have at least 2 columns")
         sys.exit(1)
 
-    print(f"Analyzed {len(df)} games.")
-    print("\nDescriptive Statistics:")
-    print(df.describe())
+    # Print statistics
+    print("# Descriptive Statistics\n")
+    print(df.describe().to_markdown())
 
-    # Analyze Win Rates
-    # Determine winner for each row
-    # In Reichtum, higher score wins.
-    # Ties are broken by fewest purchased cards, but we don't have that info in the CSV.
-    # We will assume score tie = tie for now.
+    if len(df.columns) > 2:
+        print("\nSkipping paired analysis: more than 2 players found.")
+        return
 
+    # Paired Analysis
     col1 = df.columns[0]
     col2 = df.columns[1]
+    deltas = df[col1] - df[col2]
 
-    wins1 = (df[col1] > df[col2]).sum()
-    wins2 = (df[col2] > df[col1]).sum()
-    ties = (df[col1] == df[col2]).sum()
-
-    print(f"\nWin Counts:")
-    print(f"{col1}: {wins1} ({wins1/len(df)*100:.1f}%)")
-    print(f"{col2}: {wins2} ({wins2/len(df)*100:.1f}%)")
-    print(f"Ties: {ties} ({ties/len(df)*100:.1f}%)")
+    # Ties are broken by fewest purchased cards, but we don't have that info
+    # in the CSV. Assume same score is a tie for now.
+    wins = np.array([(deltas > 0).sum(), (deltas < 0).sum(), (deltas == 0).sum()])
+    wins_df = pd.DataFrame({"Wins": wins}, index=[col1, col2, "Ties"])
+    wins_df["Win Rate"] = (wins_df["Wins"] / len(df)).apply(lambda x: f"{x:.2%}")
+    print("\n# Win Counts\n")
+    print(wins_df.to_markdown())
 
     # Statistical Test (Wilcoxon signed-rank test)
     # Checks if the distribution of differences is symmetric around zero.
-    # alternative='greater' checks if col1 > col2
+    _, p_12 = st.wilcoxon(deltas, alternative="greater", zero_method="pratt")
+    p_21 = 1 - p_12
+    print("\n# Wilcoxon Signed-Rank Test\n")
+    if p_12 < 0.05:
+        print(f"{col1} is significantly better than {col2} (p < 0.05)")
+    elif p_21 < 0.05:
+        print(f"{col2} is significantly better than {col1} (p < 0.05)")
+    else:
+        print(f"No significant difference between {col1} and {col2}")
+    print(f" - p-value {col1} > {col2}: {p_12}")
+    print(f" - p-value {col1} < {col2}: {p_21}")
 
-    # Handling ties in Wilcoxon: 'pratt' or 'wilcox' zero_method.
-    # scipy.stats.wilcoxon handles ties in differences (where score1 == score2).
-
-    try:
-        stat, p_value = st.wilcoxon(df[col1], df[col2], alternative='greater', zero_method='pratt')
-        print(f"\nWilcoxon Signed-Rank Test ({col1} > {col2}):")
-        print(f"Statistic: {stat}")
-        print(f"p-value: {p_value}")
-
-        if p_value < 0.05:
-            print(f"Result: {col1} is significantly better than {col2} (p < 0.05)")
-        else:
-            print(f"Result: No significant difference detected favoring {col1} (p >= 0.05)")
-
-    except ValueError as e:
-        print(f"Wilcoxon test failed (maybe all scores are identical?): {e}")
 
 if __name__ == "__main__":
     main()
