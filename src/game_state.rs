@@ -23,6 +23,8 @@ pub struct GameState {
     // Players.
     pub players: Vec<Player>,
     pub curr_player_idx: usize,
+    #[serde(skip)]
+    start_player_idx: usize,
 
     // Current round number.
     #[serde(default)]
@@ -52,7 +54,7 @@ impl GameState {
         nobles.shuffle(&mut rng);
         nobles.truncate(num_players + 1);
 
-        let curr_player_idx = (0..num_players).choose(&mut rng).unwrap_or(0);
+        let start_player_idx = (0..num_players).choose(&mut rng).unwrap_or(0);
 
         let bank = match num_players {
             2 => [4, 4, 4, 4, 4, 5],
@@ -66,7 +68,8 @@ impl GameState {
             nobles,
             bank,
             players: (0..num_players).map(|_| Player::default()).collect(),
-            curr_player_idx,
+            curr_player_idx: start_player_idx,
+            start_player_idx,
             round: 1,
         })
     }
@@ -148,14 +151,14 @@ impl GameState {
         }
         // Advance to the next player.
         self.curr_player_idx += 1;
+        self.curr_player_idx %= self.players.len();
         // If the round is over, check if the game is over too.
-        if self.curr_player_idx == self.players.len() {
+        if self.curr_player_idx == self.start_player_idx {
             // If any player has 15+ VP, the game is over.
             if self.players.iter().any(|p| p.vp() >= 15) {
                 return Ok(true);
             }
             self.round += 1;
-            self.curr_player_idx = 0;
         }
         Ok(false)
     }
