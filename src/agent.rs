@@ -3,6 +3,14 @@ use crate::game_state::GameState;
 use rand::seq::IndexedRandom;
 
 pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
+    let strong_bonuses = ScoringBonuses {
+        vp: 1000,
+        card_needed: 10,
+        color_needed: 1,
+        reserve_discount: 10,
+        spend_cost: 1,
+    };
+
     match difficulty {
         // Completely random actions.
         0 => Box::<RandomAgent>::default(),
@@ -18,26 +26,12 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
         }),
         // Strong Greedy Agent (prioritizes progress toward cards + nobles).
         2 => Box::new(GreedyAgent {
-            bonuses: ScoringBonuses {
-                vp: 1000,
-                card_needed: 10,
-                color_needed: 1,
-                reserve_discount: 10,
-                spend_cost: 0,
-            },
-        }),
-        // Experimental Greedy Agent (accounts for spending cost).
-        3 => Box::new(GreedyAgent {
-            bonuses: ScoringBonuses {
-                vp: 1000,
-                card_needed: 10,
-                color_needed: 1,
-                reserve_discount: 10,
-                spend_cost: 1,
-            },
+            bonuses: strong_bonuses,
         }),
         // Smart Agent (strong greedy + extra heuristics).
-        _ => Box::new(SmartAgent),
+        _ => Box::new(SmartAgent {
+            bonuses: strong_bonuses,
+        }),
     }
 }
 
@@ -85,6 +79,7 @@ impl Agent for GreedyAgent {
     }
 }
 
+#[derive(Clone, Copy)]
 struct ScoringBonuses {
     vp: i32,
     card_needed: i32,
@@ -184,7 +179,9 @@ impl ScoringInfo {
     }
 }
 
-pub struct SmartAgent;
+pub struct SmartAgent {
+    bonuses: ScoringBonuses,
+}
 
 impl Agent for SmartAgent {
     fn choose_action(&self, game: &GameState) -> Action {
@@ -232,20 +229,13 @@ impl Agent for SmartAgent {
         // 2. Fallback to Strong Greedy Strategy (d=2)
         // But with slight bias for Noble proximity (Greedy doesn't see Noble proximity well)
 
-        let bonuses = ScoringBonuses {
-            vp: 1000,
-            card_needed: 10,
-            color_needed: 1,
-            reserve_discount: 10,
-            spend_cost: 0,
-        };
         let info = ScoringInfo::new(game);
 
         let mut best_action = &actions[0];
         let mut best_score = i32::MIN;
 
         for action in &actions {
-            let mut score = info.score_action(game, action, &bonuses);
+            let mut score = info.score_action(game, action, &self.bonuses);
 
             // Add Smart Heuristics on top of Greedy Score
 
