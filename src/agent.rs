@@ -3,6 +3,14 @@ use crate::game_state::GameState;
 use rand::seq::IndexedRandom;
 
 pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
+    let strong_bonuses = ScoringBonuses {
+        vp: 1000,
+        card_needed: 10,
+        color_needed: 1,
+        reserve_discount: 10,
+        spend_cost: 1,
+    };
+
     match difficulty {
         // Completely random actions.
         0 => Box::<RandomAgent>::default(),
@@ -13,19 +21,17 @@ pub fn create_agent(difficulty: usize) -> Box<dyn Agent + Send> {
                 card_needed: 0,
                 color_needed: 0,
                 reserve_discount: 10,
+                spend_cost: 0,
             },
         }),
         // Strong Greedy Agent (prioritizes progress toward cards + nobles).
         2 => Box::new(GreedyAgent {
-            bonuses: ScoringBonuses {
-                vp: 1000,
-                card_needed: 10,
-                color_needed: 1,
-                reserve_discount: 10,
-            },
+            bonuses: strong_bonuses,
         }),
         // Smart Agent (strong greedy + extra heuristics).
-        _ => Box::new(SmartAgent),
+        _ => Box::new(SmartAgent {
+            bonuses: strong_bonuses,
+        }),
     }
 }
 
@@ -73,15 +79,13 @@ impl Agent for GreedyAgent {
     }
 }
 
+#[derive(Clone, Copy)]
 struct ScoringBonuses {
     vp: i32,
     card_needed: i32,
     color_needed: i32,
     reserve_discount: i32,
-    // TODO: add `spend_cost` here such that, when it's > 0, scoring will
-    // prefer buying cards that require spending fewer tokens, esp. gold.
-    // Then introduce a new GreedyAgent difficulty level (3) that uses it to
-    // measure how much it helps.
+    spend_cost: i32,
 }
 
 struct ScoringInfo {
@@ -135,11 +139,31 @@ impl ScoringInfo {
                     CardLocation::Reserve(_) => 1,
                     _ => 0,
                 };
+
+                let mut spend_penalty = 0;
+                if bonuses.spend_cost > 0 {
+                    let me = game.curr_player();
+                    let power = me.purchasing_power(false);
+                    for (i, &cost) in card.cost.iter().enumerate() {
+                        let cost = cost.saturating_sub(power[i]);
+                        let tokens = me.tokens[i];
+                        if cost > tokens {
+                            // Spending all tokens of this color + some gold.
+                            spend_penalty += tokens as i32;
+                            spend_penalty += (cost - tokens) as i32 * 3; // Gold penalty x3
+                        } else {
+                            spend_penalty += cost as i32;
+                        }
+                    }
+                    spend_penalty *= bonuses.spend_cost;
+                }
+
                 let idx = card.color as usize;
                 card.vp as i32 * bonuses.vp
                     + self.cards_needed[idx] * bonuses.card_needed
                     + self.colors_needed[idx] * bonuses.color_needed
                     + loc_bonus
+                    - spend_penalty
             }
             Action::ReserveCard(loc) => {
                 if let Ok(card) = game.peek_card(loc) {
@@ -155,7 +179,9 @@ impl ScoringInfo {
     }
 }
 
-pub struct SmartAgent;
+pub struct SmartAgent {
+    bonuses: ScoringBonuses,
+}
 
 impl Agent for SmartAgent {
     fn choose_action(&self, game: &GameState) -> Action {
@@ -203,19 +229,13 @@ impl Agent for SmartAgent {
         // 2. Fallback to Strong Greedy Strategy (d=2)
         // But with slight bias for Noble proximity (Greedy doesn't see Noble proximity well)
 
-        let bonuses = ScoringBonuses {
-            vp: 1000,
-            card_needed: 10,
-            color_needed: 1,
-            reserve_discount: 10,
-        };
         let info = ScoringInfo::new(game);
 
         let mut best_action = &actions[0];
         let mut best_score = i32::MIN;
 
         for action in &actions {
-            let mut score = info.score_action(game, action, &bonuses);
+            let mut score = info.score_action(game, action, &self.bonuses);
 
             // Add Smart Heuristics on top of Greedy Score
 
